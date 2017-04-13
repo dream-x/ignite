@@ -472,7 +472,7 @@ public class GridFutureAdapter<R> implements IgniteInternalFuture<R> {
     public boolean onDone(@Nullable R res, @Nullable Throwable err) {
         return onDone(res, err, false);
     }
-    public boolean onDoneForSP(@Nullable R res, @Nullable Throwable err) {return onDone(res, err, false);}
+
     /**
      * @param res Result.
      * @param err Error.

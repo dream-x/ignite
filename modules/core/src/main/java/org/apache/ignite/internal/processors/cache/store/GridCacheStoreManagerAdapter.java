@@ -1411,7 +1411,7 @@ public abstract class GridCacheStoreManagerAdapter extends GridCacheManagerAdapt
         }
 
         @Override
-        public void releaseCheckpoint(String name) {
+        public void releaseSavepoint(String name) {
             throw new UnsupportedOperationException();
         }
 

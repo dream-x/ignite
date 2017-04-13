@@ -1962,7 +1962,7 @@ public abstract class IgniteTxAdapter extends GridMetadataAwareAdapter implement
         }
 
         @Override
-        public IgniteInternalFuture releaseCheckpointAsync(String name) {
+        public IgniteInternalFuture releaseSavepointAsync(String name) {
             throw new IllegalStateException("Deserialized transaction can only be used as read-only.");
         }
 

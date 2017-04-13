@@ -906,7 +906,7 @@ public class GridCacheSharedContext<K, V> {
     public IgniteInternalFuture releaseCheckpointAsync(IgniteInternalTx tx, String name) throws IgniteCheckedException {
         tx.txState().awaitLastFut(this);
 
-        return tx.releaseCheckpointAsync(name);
+        return tx.releaseSavepointAsync(name);
     }
 
     /**
