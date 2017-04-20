@@ -149,6 +149,9 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
     /** */
     protected CacheWriteSynchronizationMode syncMode;
 
+    /** List of savepoints for this transaction, which is used to retrieve previous states. */
+    protected LinkedList<TxSavepointLocal> savepoints = new LinkedList<>();
+
     /**
      * Empty constructor required for {@link Externalizable}.
      */
@@ -1760,9 +1763,6 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
         protected abstract IgniteInternalFuture<T> postMiss(T t) throws IgniteCheckedException;
     }
 
-    /** List of savepoints for this transaction, which is used to retrieve previous states. */
-	protected LinkedList<TxSavepointLocal> savepoints = new LinkedList<>();
-
     /**
      * Creates savepoint.
      *
@@ -1780,10 +1780,12 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      */
     public void rollbackToSavepoint(String name) {
         TxSavepointLocal savepoint = releaseSavepoint(name, true);
-        if (savepoint != null) {
-            txState.rollbackToSavepoint(savepoint, cctx, this);
-            savepoints.add(savepoint);
-        } else throw new IllegalArgumentException("No such savepoint.");
+
+        if (savepoint == null)
+            throw new IllegalArgumentException("No such savepoint.");
+
+        txState.rollbackToSavepoint(savepoint, cctx, this);
+
     }
 
     /**
@@ -1800,7 +1802,7 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      *
      * @param name Savepoint ID.
      * @param isRollback Delete savepoints after chosen or not.
-     * @return The previous value associated with key, or null if there was no such savepoint.
+     * @return The previous value associated with ID, or null if there was no such savepoint.
      */
     private TxSavepointLocal releaseSavepoint(String name, boolean isRollback) {
         boolean remove = false;
@@ -1815,9 +1817,10 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
                     break;
                 }
             }
-            if (remove) {
-                i.remove();
-            }
+            else
+                if (remove) {
+                    i.remove();
+                }
         }
         return checkpoint;
     }
