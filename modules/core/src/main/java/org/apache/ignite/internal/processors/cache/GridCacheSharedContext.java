@@ -876,10 +876,10 @@ public class GridCacheSharedContext<K, V> {
      * @return Transaction savepoint future.
      * @throws IgniteCheckedException If failed.
      */
-    public IgniteInternalFuture savepointAsync(IgniteInternalTx tx, String name) throws IgniteCheckedException {
+    public void savepointAsync(IgniteInternalTx tx, String name) throws IgniteCheckedException {
         tx.txState().awaitLastFut(this);
 
-        return tx.savepointAsync(name);
+        tx.savepointAsync(name);
     }
 
     /**
@@ -888,10 +888,10 @@ public class GridCacheSharedContext<K, V> {
      * @return Rollback to savepoint future.
      * @throws IgniteCheckedException If failed.
      */
-    public IgniteInternalFuture rollbackToSavepointAsync(IgniteInternalTx tx, String name) throws IgniteCheckedException {
+    public void rollbackToSavepointAsync(IgniteInternalTx tx, String name) throws IgniteCheckedException {
         tx.txState().awaitLastFut(this);
 
-        return tx.rollbackToSavepointAsync(name);
+        tx.rollbackToSavepointAsync(name);
     }
 
     /**
@@ -900,10 +900,10 @@ public class GridCacheSharedContext<K, V> {
      * @return Release savepoint future.
      * @throws IgniteCheckedException If failed.
      */
-    public IgniteInternalFuture releaseSavepointAsync(IgniteInternalTx tx, String name) throws IgniteCheckedException {
+    public void releaseSavepointAsync(IgniteInternalTx tx, String name) throws IgniteCheckedException {
         tx.txState().awaitLastFut(this);
 
-        return tx.releaseSavepointAsync(name);
+        tx.releaseSavepointAsync(name);
     }
 
     /**

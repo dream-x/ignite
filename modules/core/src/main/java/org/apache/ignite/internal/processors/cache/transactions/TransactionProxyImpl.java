@@ -382,14 +382,11 @@ public class TransactionProxyImpl<K, V> implements TransactionProxy, Externaliza
     @Override public void savepoint(String name) {
         if (implicit())
             throw new IllegalStateException("Savepoints must be used inside explicit transactions.");
-        enter();
-        try {
-            IgniteInternalFuture savepointFut = cctx.savepointAsync(tx, name);
 
-            if (async)
-                asyncRes = new IgniteFutureImpl(savepointFut);
-            else
-                savepointFut.get();
+        enter();
+
+        try {
+            cctx.savepointAsync(tx, name);
         } catch (IgniteCheckedException e) {
             throw U.convertException(e);
         } finally {
@@ -401,14 +398,11 @@ public class TransactionProxyImpl<K, V> implements TransactionProxy, Externaliza
     @Override public void rollbackToSavepoint(String name) {
         if (implicit())
             throw new IllegalStateException("Savepoints must be used inside explicit transactions.");
-        enter();
-        try {
-            IgniteInternalFuture savepointFut = cctx.rollbackToSavepointAsync(tx, name);
 
-            if (async)
-                asyncRes = new IgniteFutureImpl(savepointFut);
-            else
-                savepointFut.get();
+        enter();
+
+        try {
+            cctx.rollbackToSavepointAsync(tx, name);
         } catch (IgniteCheckedException e) {
             throw U.convertException(e);
         } finally {
@@ -420,14 +414,11 @@ public class TransactionProxyImpl<K, V> implements TransactionProxy, Externaliza
     @Override public void releaseSavepoint(String name) {
         if (implicit())
             throw new IllegalStateException("Savepoints must be used inside explicit transactions.");
-        enter();
-        try {
-            IgniteInternalFuture savepointFut = cctx.releaseSavepointAsync(tx, name);
 
-            if (async)
-                asyncRes = new IgniteFutureImpl(savepointFut);
-            else
-                savepointFut.get();
+        enter();
+
+        try {
+            cctx.releaseSavepointAsync(tx, name);
         } catch (IgniteCheckedException e) {
             throw U.convertException(e);
         } finally {

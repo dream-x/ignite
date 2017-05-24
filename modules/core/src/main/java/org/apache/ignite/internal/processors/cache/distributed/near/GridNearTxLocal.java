@@ -3995,48 +3995,35 @@ public class GridNearTxLocal extends GridDhtTxLocalAdapter implements AutoClosea
     }
 
     /** {@inheritDoc} */
-    @Override public IgniteInternalFuture<IgniteInternalTx> savepointAsync(String name) {
+    @Override public void savepointAsync(String name) {
         if (log.isDebugEnabled())
             log.debug("Saving point \"" + name + "\" for tx: " + this);
-
-        GridNearTxSavepointFuture fut = new GridNearTxSavepointFuture<>(cctx, this, name);
-
-        cctx.mvcc().addFuture(fut, fut.futureId());
 
         if (this.prepFut != null && log.isDebugEnabled())
             log.debug("Prepare future is not null. Do not call savepoint after transaction start finishing.");
 
-        fut.savepoint();
-
-        return fut;
+        savepoint(name);
     }
 
     /** {@inheritDoc} */
-    @Override public IgniteInternalFuture rollbackToSavepointAsync(String name) {
-        GridNearTxSavepointFuture fut = new GridNearTxSavepointFuture<>(cctx, this, name);
-
-        cctx.mvcc().addFuture(fut, fut.futureId());
+    @Override public void rollbackToSavepointAsync(String name) {
+        if (log.isDebugEnabled())
+            log.debug("Rolling back to savepoint \"" + name + "\" for tx: " + this);
 
         if (this.prepFut != null && log.isDebugEnabled())
             log.debug("Prepare future is not null. Do not call rollback to savepoint after transaction start finishing.");
 
-        fut.rollbackToSavepoint();
-
-        return fut;
+        rollbackToSavepoint(name);
     }
 
     /** {@inheritDoc} */
-    @Override public IgniteInternalFuture releaseSavepointAsync(String name) {
-
-        GridNearTxSavepointFuture fut = new GridNearTxSavepointFuture<>(cctx, this, name);
-
-        cctx.mvcc().addFuture(fut, fut.futureId());
+    @Override public void releaseSavepointAsync(String name) {
+        if (log.isDebugEnabled())
+            log.debug("Releasing savepoint \"" + name + "\" for tx: " + this);
 
         if (this.prepFut != null && log.isDebugEnabled())
             log.debug("Prepare future is not null. Do not call savepoint after transaction start finishing.");
 
-        fut.releaseSavepoint();
-
-        return fut;
+        releaseSavepoint(name);
     }
 }
