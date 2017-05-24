@@ -1768,7 +1768,7 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      *
      * @param name Savepoint ID.
      */
-	public void savepoint(String name) {
+    public void savepoint(String name) {
         releaseSavepoint(name, false);
         savepoints.add(new TxSavepointLocal(name, this));
     }
