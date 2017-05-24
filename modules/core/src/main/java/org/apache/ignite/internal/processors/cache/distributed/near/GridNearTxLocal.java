@@ -151,11 +151,6 @@ public class GridNearTxLocal extends GridDhtTxLocalAdapter implements AutoClosea
     @GridToStringExclude
     private volatile GridNearTxFinishFuture rollbackFut;
 
-    /** Rollback to savepoint future. */
-    @SuppressWarnings("UnusedDeclaration")
-    @GridToStringExclude
-    private volatile GridNearTxSavepointFuture savepointFut;
-
     /** True if transaction contains near cache entries mapped to local node. */
     private boolean nearLocallyMapped;
 

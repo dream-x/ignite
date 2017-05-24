@@ -62,6 +62,8 @@ public abstract class TxSavepointsTest extends GridCommonAbstractTest {
 
         cfg.setBackups(1);
 
+        cfg.setName("txSvp_" + atomicityMode + "_" + cacheMode);
+
         return cfg;
     }
 
@@ -77,8 +79,6 @@ public abstract class TxSavepointsTest extends GridCommonAbstractTest {
      */
     protected void checkSavepoints(CacheConfiguration<Integer, Integer> cfg) throws Exception {
         startGrid(0);
-        startGrid(1);
-        startGrid(2);
 
         IgniteCache<Integer, Integer> cache = grid(0).createCache(cfg);
 

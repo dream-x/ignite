@@ -38,6 +38,12 @@ public class GridNearTxSavepointFuture<K, V> extends GridCompoundIdentityFuture<
     /** */
     private static final long serialVersionUID = 0L;
 
+    /** Future start time. */
+    private final long startTime = U.currentTimeMillis();
+
+    /** Future end time. */
+    private volatile long endTime;
+
     /** Logger reference. */
     private static final AtomicReference<IgniteLogger> logRef = new AtomicReference<>();
 
@@ -116,6 +122,7 @@ public class GridNearTxSavepointFuture<K, V> extends GridCompoundIdentityFuture<
             return false;
 
         synchronized (this) {
+            endTime = U.currentTimeMillis();
             if (isDone())
                 return false;
 
@@ -133,6 +140,17 @@ public class GridNearTxSavepointFuture<K, V> extends GridCompoundIdentityFuture<
         return false;
     }
 
+    /** {@inheritDoc} */
+    @Override public long startTime() {
+        return startTime;
+    }
+
+    /** {@inheritDoc} */
+    @Override public long duration() {
+        long endTime = this.endTime;
+
+        return (endTime == 0 ? U.currentTimeMillis() : endTime) - startTime;
+    }
 
     /** {@inheritDoc} */
     @Override public IgniteUuid futureId() {

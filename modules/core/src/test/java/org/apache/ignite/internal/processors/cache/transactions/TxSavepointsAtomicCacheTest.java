@@ -72,21 +72,21 @@ public class TxSavepointsAtomicCacheTest extends TxSavepointsTest {
     /**
      * @throws Exception If failed.
      */
-    public void testTransLocalMultipleCaches() throws Exception {
+    public void testAtomicLocalMultipleCaches() throws Exception {
         checkSavepointsWithTwoCaches(cacheConfig(ATOMIC, LOCAL));
     }
 
     /**
      * @throws Exception If failed.
      */
-    public void testTransReplicatedMultipleCaches() throws Exception {
+    public void testAtomicReplicatedMultipleCaches() throws Exception {
         checkSavepointsWithTwoCaches(cacheConfig(ATOMIC, REPLICATED));
     }
 
     /**
      * @throws Exception If failed.
      */
-    public void testTransPartitionedMultipleCaches() throws Exception {
+    public void testAtomicPartitionedMultipleCaches() throws Exception {
         checkSavepointsWithTwoCaches(cacheConfig(ATOMIC, PARTITIONED));
     }
 }

@@ -48,7 +48,7 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
 
         cfg.setDiscoverySpi(disc);
 
-        cfg.setCacheConfiguration(new CacheConfiguration().setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL));
+        cfg.setCacheConfiguration(new CacheConfiguration().setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL).setName("TxSvp"));
 
         return cfg;
     }
@@ -59,7 +59,7 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
 
         startGrid(0);
 
-        cache = grid(0).cache(null);
+        cache = grid(0).cache("TxSvp");
     }
 
     /** {@inheritDoc} */
