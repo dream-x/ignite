@@ -1768,7 +1768,10 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      *
      * @param name Savepoint ID.
      */
-    public void savepoint(String name) {
+    @Override public void savepoint(String name) {
+        if (log.isDebugEnabled())
+            log.debug("Saving point \"" + name + "\" for tx: " + this);
+
         releaseSavepoint(name, false);
         savepoints.add(new TxSavepointLocal(name, this));
     }
@@ -1778,7 +1781,10 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      *
      * @param name Savepoint ID.
      */
-    public void rollbackToSavepoint(String name) {
+    @Override public void rollbackToSavepoint(String name) {
+        if (log.isDebugEnabled())
+            log.debug("Rolling back to savepoint \"" + name + "\" for tx: " + this);
+
         TxSavepointLocal savepoint = releaseSavepoint(name, true);
 
         if (savepoint == null)
@@ -1793,7 +1799,10 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      *
      * @param name Savepoint ID.
      */
-    public void releaseSavepoint(String name) {
+    @Override public void releaseSavepoint(String name) {
+        if (log.isDebugEnabled())
+            log.debug("Releasing savepoint \"" + name + "\" for tx: " + this);
+
         releaseSavepoint(name, false);
     }
 

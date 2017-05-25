@@ -386,9 +386,9 @@ public class TransactionProxyImpl<K, V> implements TransactionProxy, Externaliza
         enter();
 
         try {
-            cctx.savepointAsync(tx, name);
-        } catch (IgniteCheckedException e) {
-            throw U.convertException(e);
+            tx.txState().awaitLastFut(cctx);
+
+            tx.savepoint(name);
         } finally {
             leave();
         }
@@ -402,9 +402,9 @@ public class TransactionProxyImpl<K, V> implements TransactionProxy, Externaliza
         enter();
 
         try {
-            cctx.rollbackToSavepointAsync(tx, name);
-        } catch (IgniteCheckedException e) {
-            throw U.convertException(e);
+            tx.txState().awaitLastFut(cctx);
+
+            tx.rollbackToSavepoint(name);
         } finally {
             leave();
         }
@@ -418,9 +418,9 @@ public class TransactionProxyImpl<K, V> implements TransactionProxy, Externaliza
         enter();
 
         try {
-            cctx.releaseSavepointAsync(tx, name);
-        } catch (IgniteCheckedException e) {
-            throw U.convertException(e);
+            tx.txState().awaitLastFut(cctx);
+
+            tx.releaseSavepoint(name);
         } finally {
             leave();
         }

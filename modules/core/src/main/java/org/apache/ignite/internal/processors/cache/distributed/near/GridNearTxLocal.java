@@ -3993,37 +3993,4 @@ public class GridNearTxLocal extends GridDhtTxLocalAdapter implements AutoClosea
             "mappings", mappings,
             "super", super.toString());
     }
-
-    /** {@inheritDoc} */
-    @Override public void savepointAsync(String name) {
-        if (log.isDebugEnabled())
-            log.debug("Saving point \"" + name + "\" for tx: " + this);
-
-        if (this.prepFut != null && log.isDebugEnabled())
-            log.debug("Prepare future is not null. Do not call savepoint after transaction start finishing.");
-
-        savepoint(name);
-    }
-
-    /** {@inheritDoc} */
-    @Override public void rollbackToSavepointAsync(String name) {
-        if (log.isDebugEnabled())
-            log.debug("Rolling back to savepoint \"" + name + "\" for tx: " + this);
-
-        if (this.prepFut != null && log.isDebugEnabled())
-            log.debug("Prepare future is not null. Do not call rollback to savepoint after transaction start finishing.");
-
-        rollbackToSavepoint(name);
-    }
-
-    /** {@inheritDoc} */
-    @Override public void releaseSavepointAsync(String name) {
-        if (log.isDebugEnabled())
-            log.debug("Releasing savepoint \"" + name + "\" for tx: " + this);
-
-        if (this.prepFut != null && log.isDebugEnabled())
-            log.debug("Prepare future is not null. Do not call savepoint after transaction start finishing.");
-
-        releaseSavepoint(name);
-    }
 }
