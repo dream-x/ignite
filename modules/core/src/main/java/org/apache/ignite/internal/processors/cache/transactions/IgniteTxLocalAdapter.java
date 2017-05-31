@@ -21,8 +21,8 @@ import java.io.Externalizable;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -1770,9 +1770,10 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      */
     @Override public void savepoint(String name) {
         if (log.isDebugEnabled())
-            log.debug("Saving point \"" + name + "\" for tx: " + this);
+            log.debug("Saving point created [savepoint=" + name + ", tx=" + this + ']');
 
         releaseSavepoint(name, false);
+
         savepoints.add(new TxSavepointLocal(name, this));
     }
 
@@ -1783,7 +1784,7 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      */
     @Override public void rollbackToSavepoint(String name) {
         if (log.isDebugEnabled())
-            log.debug("Rolling back to savepoint \"" + name + "\" for tx: " + this);
+            log.debug("Rolling back to savepoint [savepoint=" + name + ", tx=" + this + ']');
 
         TxSavepointLocal savepoint = releaseSavepoint(name, true);
 
@@ -1791,17 +1792,16 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
             throw new IllegalArgumentException("No such savepoint.");
 
         txState.rollbackToSavepoint(savepoint, cctx, this);
-
     }
 
     /**
-     * Delete savepoint.
+     * Release savepoint and remove it from savepoint list. Rallback to this savepoint will be unavailable.
      *
      * @param name Savepoint ID.
      */
     @Override public void releaseSavepoint(String name) {
         if (log.isDebugEnabled())
-            log.debug("Releasing savepoint \"" + name + "\" for tx: " + this);
+            log.debug("Releasing savepoint [savepoint=" + name + ", tx=" + this + ']');
 
         releaseSavepoint(name, false);
     }
@@ -1810,27 +1810,36 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      * Delete savepoint.
      *
      * @param name Savepoint ID.
-     * @param isRollback Delete savepoints after chosen or not.
+     * @param removeSubsequentSavepoints Release savepoints after chosen or not.
      * @return The previous value associated with ID, or null if there was no such savepoint.
      */
-    private TxSavepointLocal releaseSavepoint(String name, boolean isRollback) {
+    private TxSavepointLocal releaseSavepoint(String name, boolean removeSubsequentSavepoints) {
         boolean remove = false;
-        TxSavepointLocal checkpoint = null;
-        for (Iterator<TxSavepointLocal> i = savepoints.iterator(); i.hasNext(); ) {
-            TxSavepointLocal savepoint = i.next();
-            if (savepoint.getName().equals(name)) {
-                checkpoint = savepoint;
-                if (isRollback) remove = true;
-                else {
+
+        TxSavepointLocal savepoint = null;
+
+        ListIterator<TxSavepointLocal> i = savepoints.listIterator(savepoints.size());
+
+        while(i.hasPrevious()) {
+            TxSavepointLocal s = i.previous();
+            if (s.getName().equals(name)) {
+                savepoint = s;
+
+                break;
+            }
+        }
+
+        if (savepoint != null) {
+            i.remove();
+
+            if (removeSubsequentSavepoints) {
+                while (i.hasNext()) {
+                    i.next();
                     i.remove();
-                    break;
                 }
             }
-            else
-                if (remove) {
-                    i.remove();
-                }
         }
-        return checkpoint;
+
+        return savepoint;
     }
 }

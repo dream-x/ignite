@@ -500,25 +500,26 @@ public class IgniteTxStateImpl extends IgniteTxLocalStateAdapter {
 
     /** {@inheritDoc} */
     @Override public void rollbackToSavepoint(TxSavepoint txSavepoint,
-                                              GridCacheSharedContext cctx,
-                                              IgniteInternalTx tx) {
+        GridCacheSharedContext cctx,
+        IgniteInternalTx tx
+    ) {
         assert txSavepoint instanceof TxSavepointLocal : "Class IgniteTxStateImpl used not in local transaction. " +
-                "TxSavepoint: " + txSavepoint + ". Tx: " + tx;
+            "[TxSavepoint=" + txSavepoint + ", tx=" + tx + ']';
         assert cctx != null;
         assert tx != null;
 
         if (txMap != null) {
-
             TxSavepointLocal savepoint = (TxSavepointLocal) txSavepoint;
 
             for (Map.Entry<IgniteTxKey, IgniteTxEntry> next : txMap.entrySet()) {
-                if (!savepoint.containsKey(next.getKey()) && tx.pessimistic())
+                if (!savepoint.containsKey(next.getKey()) && tx.pessimistic()) {
                     try {
                         next.getValue().cached().txUnlock(tx);
                     } catch (GridCacheEntryRemovedException e) {
                         throw new IgniteException("Failed to unlock entry during rollback to savepoint. " +
-                                "Entry: " + next.getValue() + "; transaction:" + tx, e);
+                            "Entry: " + next.getValue() + "; transaction:" + tx, e);
                     }
+                }
             }
 
             txMap.clear();
@@ -528,12 +529,11 @@ public class IgniteTxStateImpl extends IgniteTxLocalStateAdapter {
             readView = new IgniteTxMap(txMap, CU.reads());
 
             writeView = new IgniteTxMap(txMap, CU.writes());
-
         } else {
             cctx.messageLogger().info("Nothing to rollback. " +
-                    "Savepoints are available only for transactional caches on the same node as transaction. " +
-                    "Atomic caches and caches from other nodes have nothing to save and rollback " +
-                    "because they have non transactional behaviour.");
+                "Savepoints are available only for transactional caches on the same node as transaction. " +
+                "Atomic caches and caches from other nodes have nothing to save and rollback " +
+                "because they have non transactional behaviour.");
         }
     }
 }

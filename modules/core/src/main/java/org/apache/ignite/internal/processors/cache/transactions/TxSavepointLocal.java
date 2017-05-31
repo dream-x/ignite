@@ -39,8 +39,7 @@ public class TxSavepointLocal implements TxSavepoint {
      * @param name Savepoint ID.
      * @param tx Transaction, which state should be saved.
      */
-    public TxSavepointLocal(String name,
-                            IgniteInternalTx tx) {
+    public TxSavepointLocal(String name, IgniteInternalTx tx) {
         this.name = name;
 
         Collection<IgniteTxEntry> stateEntries = tx.txState().allEntries();

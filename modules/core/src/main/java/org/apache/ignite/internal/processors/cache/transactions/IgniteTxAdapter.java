@@ -1967,20 +1967,17 @@ public abstract class IgniteTxAdapter extends GridMetadataAwareAdapter implement
         }
 
         /** {@inheritDoc} */
-        @Override
-        public void savepoint(String name) {
+        @Override public void savepoint(String name) {
             throw new IllegalStateException("Deserialized transaction can only be used as read-only.");
         }
 
         /** {@inheritDoc} */
-        @Override
-        public void rollbackToSavepoint(String name) {
+        @Override public void rollbackToSavepoint(String name) {
             throw new IllegalStateException("Deserialized transaction can only be used as read-only.");
         }
 
         /** {@inheritDoc} */
-        @Override
-        public void releaseSavepoint(String name) {
+        @Override public void releaseSavepoint(String name) {
             throw new IllegalStateException("Deserialized transaction can only be used as read-only.");
         }
 
