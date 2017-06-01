@@ -25,6 +25,8 @@ import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 import org.apache.ignite.transactions.Transaction;
+import org.apache.ignite.transactions.TransactionConcurrency;
+import org.apache.ignite.transactions.TransactionIsolation;
 
 import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
 
@@ -32,8 +34,6 @@ import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
  *
  */
 public class TxSavepointsSelfTest extends GridCommonAbstractTest {
-
-    private static String ERR_MSG = "No such savepoint.";
 
     /** */
     private IgniteCache<Integer, Integer> cache;
@@ -48,7 +48,7 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
 
         cfg.setDiscoverySpi(disc);
 
-        cfg.setCacheConfiguration(new CacheConfiguration().setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL).setName("TxSvp"));
+        cfg.setCacheConfiguration(new CacheConfiguration().setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL).setName(DEFAULT_CACHE_NAME));
 
         return cfg;
     }
@@ -59,7 +59,7 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
 
         startGrid(0);
 
-        cache = grid(0).cache("TxSvp");
+        cache = grid(0).cache(DEFAULT_CACHE_NAME);
     }
 
     /** {@inheritDoc} */
@@ -71,87 +71,117 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
      * Tests savepoint.
      */
     public void testSavepoints() {
-        try (Transaction tx = grid(0).transactions().txStart()) {
-            putThreeValuesAndCreateSavepoints(tx);
+        for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+            for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                clearCache();
 
-            tx.rollbackToSavepoint("s2");
+                try (Transaction tx = grid(0).transactions().txStart(concurrency, isolation)) {
+                    putThreeValuesAndCreateSavepoints(tx);
 
-            tx.commit();
-        }
-        assertEquals((Integer) 2, cache.get(2));
+                    tx.rollbackToSavepoint("s2");
+
+                    tx.commit();
+                }
+
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
+            }
     }
 
     /**
      * Tests valid and invalid rollbacks to savepoint.
      */
     public void testFailRollbackToSavepoint() {
-        Exception err = null;
-        try (Transaction tx = grid(0).transactions().txStart()) {
-            putThreeValuesAndCreateSavepoints(tx);
+        for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+            for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                clearCache();
 
-            tx.rollbackToSavepoint("s2");
+                Exception err = null;
 
-            assertEquals((Integer) 2, cache.get(2));
+                try (Transaction tx = grid(0).transactions().txStart()) {
+                    putThreeValuesAndCreateSavepoints(tx);
 
-            tx.rollbackToSavepoint("s3");
-        } catch (Exception e) {
-            assertTrue("Unexpected exception: " + e.getMessage(), e.getMessage().startsWith(ERR_MSG));
+                    tx.rollbackToSavepoint("s2");
 
-            err = e;
-        }
-        assertNotNull(err);
+                    assertEquals((Integer) 2, cache.get(2));
+
+                    tx.rollbackToSavepoint("s3");
+                } catch (Exception e) {
+                    assertTrue("Failed in "+concurrency+' '+isolation+" transaction." +
+                        " Unexpected exception: " + e.getMessage(), e.getMessage().startsWith("No such savepoint."));
+
+                    err = e;
+                }
+
+                assertNotNull("Failed in "+concurrency+' '+isolation+" transaction. Exception expected.", err);
+            }
     }
 
     /**
      * Tests savepoint deleting.
      */
     public void testReleaseSavepoints() {
-        try (Transaction tx = grid(0).transactions().txStart()) {
-            putThreeValuesAndCreateSavepoints(tx);
+        for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+            for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                clearCache();
 
-            tx.releaseSavepoint("s1");
+                try (Transaction tx = grid(0).transactions().txStart()) {
+                    putThreeValuesAndCreateSavepoints(tx);
 
-            tx.releaseSavepoint("s3");
+                    tx.releaseSavepoint("s1");
 
-            tx.rollbackToSavepoint("s2");
+                    tx.releaseSavepoint("s3");
 
-            tx.commit();
-        }
-        assertEquals((Integer) 2, cache.get(2));
+                    tx.rollbackToSavepoint("s2");
+
+                    tx.commit();
+                }
+
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
+            }
     }
 
     /**
      * Tests rollbacks to the same savepoint instance.
      */
     public void testMultipleRollbackToSavepoint() {
-        try (Transaction tx = grid(0).transactions().txStart()) {
-            putThreeValuesAndCreateSavepoints(tx);
+        for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+            for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                clearCache();
 
-            tx.rollbackToSavepoint("s2");
+                try (Transaction tx = grid(0).transactions().txStart()) {
+                    putThreeValuesAndCreateSavepoints(tx);
 
-            cache.put(2, 3);
+                    tx.rollbackToSavepoint("s2");
 
-            tx.rollbackToSavepoint("s2");
+                    cache.put(2, 3);
 
-            tx.commit();
-        }
-        assertEquals((Integer) 2, cache.get(2));
+                    tx.rollbackToSavepoint("s2");
+
+                    tx.commit();
+                }
+
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
+            }
     }
 
     /**
      * Tests savepoints in failed transaction.
      */
     public void testTransactionRollback() {
-        try (Transaction tx = grid(0).transactions().txStart()) {
-            putThreeValuesAndCreateSavepoints(tx);
+        for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+            for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                try (Transaction tx = grid(0).transactions().txStart()) {
+                    putThreeValuesAndCreateSavepoints(tx);
 
-            tx.releaseSavepoint("s3");
+                    tx.releaseSavepoint("s3");
 
-            tx.rollbackToSavepoint("s2");
+                    tx.rollbackToSavepoint("s2");
 
-            tx.rollback();
-        }
-        assertEquals(null, cache.get(2));
+                    tx.rollback();
+                }
+
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", null, cache.get(2));
+            }
     }
 
     /**
@@ -159,22 +189,30 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
      */
     public void testMultiCaches() {
         IgniteCache<Integer, Integer> cache1 = grid(0)
-                .createCache(new CacheConfiguration<Integer, Integer>(cache.getConfiguration(CacheConfiguration.class))
-                        .setAtomicityMode(ATOMIC)
-                        .setName("Second Cache"));
-        try (Transaction tx = grid(0).transactions().txStart()) {
-            cache1.put(2, 1);
+            .createCache(new CacheConfiguration<Integer, Integer>(cache.getConfiguration(CacheConfiguration.class))
+                .setAtomicityMode(ATOMIC)
+                .setName("Second Cache"));
 
-            putThreeValuesAndCreateSavepoints(tx);
+        for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+            for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                clearCache();
+                cache1.put(2, 0);
 
-            cache1.put(2, 2);
+                try (Transaction tx = grid(0).transactions().txStart()) {
+                    cache1.put(2, 1);
 
-            tx.rollbackToSavepoint("s2");
+                    putThreeValuesAndCreateSavepoints(tx);
 
-            tx.commit();
-        }
-        assertEquals((Integer) 2, cache.get(2));
-        assertEquals((Integer) 2, cache1.get(2));
+                    cache1.put(2, 2);
+
+                    tx.rollbackToSavepoint("s2");
+
+                    tx.commit();
+                }
+
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache1.get(2));
+            }
     }
 
     /**
@@ -182,11 +220,19 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
      */
     private void putThreeValuesAndCreateSavepoints(Transaction tx) {
         cache.put(2, 1);
+
         tx.savepoint("s1");
+
         cache.put(2, 2);
+
         tx.savepoint("s2");
+
         cache.put(2, 3);
+
         tx.savepoint("s3");
     }
 
+    private void clearCache() {
+        cache.put(2, 0);
+    }
 }

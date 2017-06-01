@@ -29,10 +29,29 @@ import org.apache.ignite.transactions.Transaction;
 import org.apache.ignite.transactions.TransactionConcurrency;
 import org.apache.ignite.transactions.TransactionIsolation;
 
+import java.util.ArrayList;
+
+import static org.apache.ignite.cache.CacheAtomicityMode.TRANSACTIONAL;
+
 /**
  *
  */
 public abstract class TxSavepointsTest extends GridCommonAbstractTest {
+
+    private final static ArrayList<TestEntry> testEntries = new ArrayList<>();
+    static {
+        String one[] = {"put1", "remove"};
+        String two[] = {"put2", "nothing"};
+        String three[] = {"put3", "remove", "put4AndRemove", "nothing"};
+        int idx = 0;
+        for (int i = 0; i < one.length; i++) {
+            for (int j = 0; j < two.length; j++) {
+                for (int k = 0; k < three.length; k++) {
+                    testEntries.add(new TestEntry(++idx, one[i], two[j], three[k]));
+                }
+            }
+        }
+    }
 
     /** {@inheritDoc} */
     @Override protected IgniteConfiguration getConfiguration(String gridName) throws Exception {
@@ -52,8 +71,7 @@ public abstract class TxSavepointsTest extends GridCommonAbstractTest {
      * @param cacheMode Cache mode.
      * @return Cache configuration.
      */
-    protected CacheConfiguration<Integer, Integer> cacheConfig(CacheAtomicityMode atomicityMode,
-                                                               CacheMode cacheMode) {
+    protected CacheConfiguration<Integer, Integer> cacheConfig(CacheAtomicityMode atomicityMode, CacheMode cacheMode) {
         CacheConfiguration<Integer, Integer> cfg  = new CacheConfiguration<>();
 
         cfg.setAtomicityMode(atomicityMode);
@@ -68,17 +86,14 @@ public abstract class TxSavepointsTest extends GridCommonAbstractTest {
     }
 
     /**
-     * @param errMsg Message to show for incorrect result.
-     * @param cache Cache, which values will be checked.
-     */
-    protected abstract void checkResult(String errMsg, IgniteCache<Integer, Integer> cache);
-
-    /**
-     * @param cfg Will be used to configure cache.
+     * @param atomicityMode Cache atomicity mode.
+     * @param cacheMode Cache mode.
      * @throws Exception If test fails.
      */
-    protected void checkSavepoints(CacheConfiguration<Integer, Integer> cfg) throws Exception {
+    protected void checkSavepoints(CacheAtomicityMode atomicityMode, CacheMode cacheMode) throws Exception {
         startGrid(0);
+
+        CacheConfiguration<Integer, Integer> cfg = cacheConfig(atomicityMode, cacheMode);
 
         IgniteCache<Integer, Integer> cache = grid(0).createCache(cfg);
 
@@ -87,46 +102,39 @@ public abstract class TxSavepointsTest extends GridCommonAbstractTest {
                 if (isDebug())
                     info(concurrency + " " + isolation);
 
-                cachePutBeforeTx(cache);
+                doActionsBeforeTx(cache);
 
                 try (Transaction tx = grid(0).transactions().txStart(concurrency, isolation)) {
                     String errMsg = "Broken rollback to savepoint in " + concurrency + " " + isolation + " transaction.";
 
-                    cacheActionsBeforeSavepoint(cache);
+                    doActivity("s1", tx, cache);
 
-                    tx.savepoint("s1");
+                    checkResult(errMsg, cfg, cache);
 
-                    cachePutAfterSavepoint(cache);
+                    doActivity("s2", tx, cache);
 
-                    tx.rollbackToSavepoint("s1");
-
-                    checkResult(errMsg, cache);
-
-                    cacheActionsBeforeSavepoint(cache);
-
-                    tx.savepoint("s2");
-
-                    cachePutAfterSavepoint(cache);
-
-                    tx.rollbackToSavepoint("s2");
-
-                    checkResult(errMsg, cache);
+                    checkResult(errMsg, cfg, cache);
 
                     tx.commit();
                 }
+
                 String errMsg = "Broken commit after savepoint in " + concurrency + " " + isolation + " transaction.";
-                checkResult(errMsg, cache);
+
+                checkResult(errMsg, cfg, cache);
             }
     }
 
     /**
-     * @param cfg Will be used to configure cache.
+     * @param atomicityMode Cache atomicity mode.
+     * @param cacheMode Cache mode.
      * @throws Exception If test fails.
      */
-    protected void checkSavepointsWithTwoCaches(CacheConfiguration<Integer, Integer> cfg) throws Exception {
+    protected void checkSavepointsWithTwoCaches(CacheAtomicityMode atomicityMode, CacheMode cacheMode) throws Exception {
         startGrid(0);
         startGrid(1);
         startGrid(2);
+
+        CacheConfiguration<Integer, Integer> cfg = cacheConfig(atomicityMode, cacheMode);
 
         IgniteCache<Integer, Integer> cache1 = grid(0).createCache(cfg.setName("First Cache"));
         IgniteCache<Integer, Integer> cache2 = grid(0).createCache(new CacheConfiguration<Integer, Integer>(cfg).setName("Second Cache"));
@@ -136,107 +144,169 @@ public abstract class TxSavepointsTest extends GridCommonAbstractTest {
                 if (isDebug())
                     info(concurrency + " " + isolation);
 
-                cachePutBeforeTx(cache1);
-                cachePutBeforeTx(cache2);
+                doActionsBeforeTx(cache1);
+                doActionsBeforeTx(cache2);
 
                 try (Transaction tx = grid(0).transactions().txStart(concurrency, isolation)) {
                     String errMsg = "Broken rollback to savepoint in " + concurrency + " " + isolation + " transaction in cache";
 
-                    cacheActionsBeforeSavepoint(cache1);
-                    cacheActionsBeforeSavepoint(cache2);
+                    doActivity("s1", tx, cache1, cache2);
 
-                    tx.savepoint("s1");
+                    checkResult(errMsg + "1.", cfg, cache1);
+                    checkResult(errMsg + "2.", cfg, cache2);
 
-                    cachePutAfterSavepoint(cache1);
-                    cachePutAfterSavepoint(cache2);
+                    doActivity("s2", tx, cache1, cache2);
 
-                    tx.rollbackToSavepoint("s1");
-
-                    checkResult(errMsg + "1.", cache1);
-                    checkResult(errMsg + "2.", cache2);
-
-                    cacheActionsBeforeSavepoint(cache1);
-                    cacheActionsBeforeSavepoint(cache2);
-
-                    tx.savepoint("s2");
-
-                    cachePutAfterSavepoint(cache1);
-                    cachePutAfterSavepoint(cache2);
-
-                    tx.rollbackToSavepoint("s2");
-
-                    checkResult(errMsg + "1.", cache1);
-                    checkResult(errMsg + "2.", cache2);
+                    checkResult(errMsg + "1.", cfg, cache1);
+                    checkResult(errMsg + "2.", cfg, cache2);
 
                     tx.commit();
                 }
+
                 String errMsg = "Broken commit after savepoint in " + concurrency + " " + isolation + " transaction in cache";
-                checkResult(errMsg + "1.", cache1);
-                checkResult(errMsg + "2.", cache2);
+
+                checkResult(errMsg + "1.", cfg, cache1);
+                checkResult(errMsg + "2.", cfg, cache2);
             }
     }
 
     /**
-     * Init starting values.
-     *
-     * @param cache Where to put.
+     * @param savepointName Savepoint which will be created and rolled back to.
+     * @param tx Transaction.
+     * @param caches Caches for some operations.
      */
-    private void cachePutBeforeTx(IgniteCache<Integer, Integer> cache) {
-        cache.put(1, 0);
-        cache.put(2, 0);
-        cache.put(3, 0);
-        cache.put(4, 0);
-        cache.put(5, 5);
-        cache.put(6, 6);
-        cache.put(7, 7);
-        cache.put(8, 8);
-        cache.remove(9);
-        cache.remove(10);
-        cache.remove(11);
-        cache.remove(12);
-        cache.remove(13);
-        cache.remove(14);
-        cache.remove(15);
+    private void doActivity(String savepointName, Transaction tx, IgniteCache<Integer, Integer>... caches) {
+        for (IgniteCache<Integer, Integer> cache : caches) {
+            doActionsBeforeSavepoint(cache);
+
+            tx.savepoint(savepointName);
+
+            doActionsAfterSavepoint(cache);
+
+            tx.rollbackToSavepoint(savepointName);
+        }
     }
 
     /**
-     * Put values which must be committed.
-     *
-     * @param cache Where to put.
+     * @param cache Cache to work with.
      */
-    private void cacheActionsBeforeSavepoint(IgniteCache<Integer, Integer> cache) {
-        cache.put(1, 1);
-        cache.put(2, 2);
-        cache.put(3, 3);
-        cache.put(4, 4);
-        cache.put(9, 9);
-        cache.put(10, 10);
-        cache.put(11, 11);
-        cache.put(12, 12);
+    private void doActionsBeforeTx(IgniteCache<Integer, Integer> cache) {
+        for (TestEntry e : testEntries) {
+            doAction(cache, e.index, e.actionBeforeTx);
+        }
     }
 
     /**
-     * Put values which must be rolled back.
-     *
-     * @param cache Where to put.
+     * @param cache Cache to work with.
      */
-    private void cachePutAfterSavepoint(IgniteCache<Integer, Integer> cache) {
-        cache.put(2, 33);
-        cache.remove(3);
-        cache.put(4, 33);
-        cache.remove(4);
-        cache.put(6, 33);
-        cache.remove(7);
-        cache.put(8, 33);
-        cache.remove(8);
-        cache.put(10, 33);
-        cache.remove(11);
-        cache.put(12, 33);
-        cache.remove(12);
-        cache.put(13, 33);
-        cache.remove(14);
-        cache.put(15, 33);
-        cache.remove(15);
+    private void doActionsBeforeSavepoint(IgniteCache<Integer, Integer> cache) {
+        for (TestEntry e : testEntries) {
+            doAction(cache, e.index, e.actionBeforeSavepoint);
+        }
+    }
+
+    /**
+     * @param cache Cache to work with.
+     */
+    private void doActionsAfterSavepoint(IgniteCache<Integer, Integer> cache) {
+        for (TestEntry e : testEntries) {
+            doAction(cache, e.index, e.actionAfterSavepoint);
+        }
+    }
+
+    /**
+     * @param errMsg Error message.
+     * @param cfg Cache configuration.
+     * @param cache Cache to work with.
+     */
+    private void checkResult(String errMsg, CacheConfiguration cfg, IgniteCache<Integer, Integer> cache) {
+        for (TestEntry e : testEntries) {
+            if (cfg.getAtomicityMode() == TRANSACTIONAL)
+                assertEquals(errMsg, e.resultTransactional, cache.get(e.index));
+            else
+                assertEquals(errMsg, e.resultAtomic, cache.get(e.index));
+        }
+    }
+
+    /** */
+    private static class TestEntry {
+        private final Integer index;
+        private final String actionBeforeTx;
+        private final String actionBeforeSavepoint;
+        private final String actionAfterSavepoint;
+        private final Integer resultTransactional;
+        private final Integer resultAtomic;
+
+        private TestEntry(int index, String actionBeforeTx, String actionBeforeSavepoint, String actionAfterSavepoint) {
+            this.index = index;
+            this.actionBeforeTx = actionBeforeTx;
+            this.actionBeforeSavepoint = actionBeforeSavepoint;
+            this.actionAfterSavepoint = actionAfterSavepoint;
+
+            if (actionBeforeSavepoint.equals("put2")) {
+                resultTransactional = 2;
+            } else {
+                if (actionBeforeTx.equals("put1"))
+                    resultTransactional = 1;
+                else
+                    resultTransactional = null;
+            }
+
+            if (actionAfterSavepoint.equals("put3")) {
+                resultAtomic = 3;
+            } else {
+                if (actionAfterSavepoint.equals("remove") || actionAfterSavepoint.equals("put4AndRemove")) {
+                    resultAtomic = null;
+                } else {
+                    if (actionBeforeSavepoint.equals("put2")) {
+                        resultAtomic = 2;
+                    } else {
+                        if (actionBeforeTx.equals("put1"))
+                            resultAtomic = 1;
+                        else
+                            resultAtomic = null;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @param cache Cache to work with.
+     * @param key Key to be changed in cache.
+     * @param action What to do with given key.
+     */
+    private void doAction(IgniteCache<Integer, Integer> cache, Integer key, String action) {
+        switch (action) {
+            case "put1":
+                cache.put(key, 1);
+
+                break;
+
+            case "put2":
+                cache.put(key, 2);
+
+                break;
+
+            case "put3":
+                cache.put(key, 3);
+
+                break;
+
+            case "remove":
+                cache.remove(key);
+
+                break;
+
+            case "put4AndRemove":
+                cache.put(key, 4);
+                cache.remove(key);
+
+                break;
+
+            default:
+                break;
+        }
     }
 
     /** {@inheritDoc} */

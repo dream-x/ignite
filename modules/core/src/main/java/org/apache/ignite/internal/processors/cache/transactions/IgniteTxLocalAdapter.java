@@ -1792,6 +1792,8 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
             throw new IllegalArgumentException("No such savepoint.");
 
         txState.rollbackToSavepoint(savepoint, cctx, this);
+
+        savepoints.add(savepoint);
     }
 
     /**

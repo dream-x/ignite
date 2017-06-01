@@ -28,65 +28,45 @@ import static org.apache.ignite.cache.CacheMode.REPLICATED;
  */
 public class TxSavepointsAtomicCacheTest extends TxSavepointsTest {
 
-    /** {@inheritDoc} */
-    @Override protected void checkResult(String errMsg, IgniteCache<Integer, Integer> cache) {
-        assertEquals(errMsg, (Integer) 1, cache.get(1));
-        assertEquals(errMsg, (Integer) 33, cache.get(2));
-        assertEquals(errMsg, null, cache.get(3));
-        assertEquals(errMsg, null, cache.get(4));
-        assertEquals(errMsg, (Integer) 5, cache.get(5));
-        assertEquals(errMsg, (Integer) 33, cache.get(6));
-        assertEquals(errMsg, null, cache.get(7));
-        assertEquals(errMsg, null, cache.get(8));
-        assertEquals(errMsg, (Integer) 9, cache.get(9));
-        assertEquals(errMsg, (Integer) 33, cache.get(10));
-        assertEquals(errMsg, null, cache.get(11));
-        assertEquals(errMsg, null, cache.get(12));
-        assertEquals(errMsg, (Integer) 33, cache.get(13));
-        assertEquals(errMsg, null, cache.get(14));
-        assertEquals(errMsg, null, cache.get(15));
-        assertEquals(errMsg, null, cache.get(16));
-    }
-
     /**
      * @throws Exception If failed.
      */
     public void testAtomicLocal() throws Exception {
-        checkSavepoints(cacheConfig(ATOMIC, LOCAL));
+        checkSavepoints(ATOMIC, LOCAL);
     }
 
     /**
      * @throws Exception If failed.
      */
     public void testAtomicReplicated() throws Exception {
-        checkSavepoints(cacheConfig(ATOMIC, REPLICATED));
+        checkSavepoints(ATOMIC, REPLICATED);
     }
 
     /**
      * @throws Exception If failed.
      */
     public void testAtomicPartitioned() throws Exception {
-        checkSavepoints(cacheConfig(ATOMIC, PARTITIONED));
+        checkSavepoints(ATOMIC, PARTITIONED);
     }
 
     /**
      * @throws Exception If failed.
      */
     public void testAtomicLocalMultipleCaches() throws Exception {
-        checkSavepointsWithTwoCaches(cacheConfig(ATOMIC, LOCAL));
+        checkSavepointsWithTwoCaches(ATOMIC, LOCAL);
     }
 
     /**
      * @throws Exception If failed.
      */
     public void testAtomicReplicatedMultipleCaches() throws Exception {
-        checkSavepointsWithTwoCaches(cacheConfig(ATOMIC, REPLICATED));
+        checkSavepointsWithTwoCaches(ATOMIC, REPLICATED);
     }
 
     /**
      * @throws Exception If failed.
      */
     public void testAtomicPartitionedMultipleCaches() throws Exception {
-        checkSavepointsWithTwoCaches(cacheConfig(ATOMIC, PARTITIONED));
+        checkSavepointsWithTwoCaches(ATOMIC, PARTITIONED);
     }
 }
