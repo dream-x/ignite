@@ -511,16 +511,7 @@ public class IgniteTxStateImpl extends IgniteTxLocalStateAdapter {
         if (txMap != null) {
             TxSavepointLocal savepoint = (TxSavepointLocal) txSavepoint;
 
-            for (Map.Entry<IgniteTxKey, IgniteTxEntry> next : txMap.entrySet()) {
-                if (!savepoint.containsKey(next.getKey()) && tx.pessimistic()) {
-                    try {
-                        next.getValue().cached().txUnlock(tx);
-                    } catch (GridCacheEntryRemovedException e) {
-                        throw new IgniteException("Failed to unlock entry during rollback to savepoint. " +
-                            "Entry: " + next.getValue() + "; transaction:" + tx, e);
-                    }
-                }
-            }
+            Map<IgniteTxKey, IgniteTxEntry> tmpMap = new HashMap<>(txMap);
 
             txMap.clear();
 
@@ -529,6 +520,17 @@ public class IgniteTxStateImpl extends IgniteTxLocalStateAdapter {
             readView = new IgniteTxMap(txMap, CU.reads());
 
             writeView = new IgniteTxMap(txMap, CU.writes());
+
+            for (Map.Entry<IgniteTxKey, IgniteTxEntry> entry : tmpMap.entrySet()) {
+                if (!savepoint.containsKey(entry.getKey()) && tx.pessimistic()) {
+                    try {
+                        entry.getValue().cached().txUnlock(tx);
+                    } catch (GridCacheEntryRemovedException e) {
+                        throw new IgniteException("Failed to unlock entry during rollback to savepoint. " +
+                            "Entry: " + entry.getValue() + "; transaction:" + tx, e);
+                    }
+                }
+            }
         } else {
             cctx.messageLogger().info("Nothing to rollback. " +
                 "Savepoints are available only for transactional caches on the same node as transaction. " +

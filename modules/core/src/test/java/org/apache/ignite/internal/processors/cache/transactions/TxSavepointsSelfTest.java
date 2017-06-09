@@ -73,10 +73,20 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     public void testSavepoints() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                clearCache();
+                cache.put(2, 0);
 
                 try (Transaction tx = grid(0).transactions().txStart(concurrency, isolation)) {
-                    putThreeValuesAndCreateSavepoints(tx);
+                    cache.put(2, 1);
+
+                    tx.savepoint("s1");
+
+                    cache.put(2, 2);
+
+                    tx.savepoint("s2");
+
+                    cache.put(2, 3);
+
+                    tx.savepoint("s3");
 
                     tx.rollbackToSavepoint("s2");
 
@@ -93,12 +103,22 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     public void testFailRollbackToSavepoint() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                clearCache();
+                cache.put(2, 0);
 
                 Exception err = null;
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    putThreeValuesAndCreateSavepoints(tx);
+                    cache.put(2, 1);
+
+                    tx.savepoint("s1");
+
+                    cache.put(2, 2);
+
+                    tx.savepoint("s2");
+
+                    cache.put(2, 3);
+
+                    tx.savepoint("s3");
 
                     tx.rollbackToSavepoint("s2");
 
@@ -122,10 +142,20 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     public void testReleaseSavepoints() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                clearCache();
+                cache.put(2, 0);
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    putThreeValuesAndCreateSavepoints(tx);
+                    cache.put(2, 1);
+
+                    tx.savepoint("s1");
+
+                    cache.put(2, 2);
+
+                    tx.savepoint("s2");
+
+                    cache.put(2, 3);
+
+                    tx.savepoint("s3");
 
                     tx.releaseSavepoint("s1");
 
@@ -146,10 +176,20 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     public void testMultipleRollbackToSavepoint() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                clearCache();
+                cache.put(2, 0);
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    putThreeValuesAndCreateSavepoints(tx);
+                    cache.put(2, 1);
+
+                    tx.savepoint("s1");
+
+                    cache.put(2, 2);
+
+                    tx.savepoint("s2");
+
+                    cache.put(2, 3);
+
+                    tx.savepoint("s3");
 
                     tx.rollbackToSavepoint("s2");
 
@@ -171,7 +211,17 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    putThreeValuesAndCreateSavepoints(tx);
+                    cache.put(2, 1);
+
+                    tx.savepoint("s1");
+
+                    cache.put(2, 2);
+
+                    tx.savepoint("s2");
+
+                    cache.put(2, 3);
+
+                    tx.savepoint("s3");
 
                     tx.releaseSavepoint("s3");
 
@@ -195,13 +245,23 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
 
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                clearCache();
+                cache.put(2, 0);
                 cache1.put(2, 0);
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
                     cache1.put(2, 1);
 
-                    putThreeValuesAndCreateSavepoints(tx);
+                    cache.put(2, 1);
+
+                    tx.savepoint("s1");
+
+                    cache.put(2, 2);
+
+                    tx.savepoint("s2");
+
+                    cache.put(2, 3);
+
+                    tx.savepoint("s3");;
 
                     cache1.put(2, 2);
 
@@ -213,26 +273,5 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
                 assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
                 assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache1.get(2));
             }
-    }
-
-    /**
-     * @param tx Transaction for savepoints.
-     */
-    private void putThreeValuesAndCreateSavepoints(Transaction tx) {
-        cache.put(2, 1);
-
-        tx.savepoint("s1");
-
-        cache.put(2, 2);
-
-        tx.savepoint("s2");
-
-        cache.put(2, 3);
-
-        tx.savepoint("s3");
-    }
-
-    private void clearCache() {
-        cache.put(2, 0);
     }
 }

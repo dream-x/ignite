@@ -18,55 +18,94 @@
 package org.apache.ignite.internal.processors.cache.transactions;
 
 import org.apache.ignite.IgniteCache;
+import org.apache.ignite.cache.CacheMode;
+import org.apache.ignite.configuration.CacheConfiguration;
+import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
+import org.apache.ignite.transactions.Transaction;
+import org.apache.ignite.transactions.TransactionConcurrency;
+import org.apache.ignite.transactions.TransactionIsolation;
+
 import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
-import static org.apache.ignite.cache.CacheMode.LOCAL;
-import static org.apache.ignite.cache.CacheMode.PARTITIONED;
-import static org.apache.ignite.cache.CacheMode.REPLICATED;
 
-/**
- *
- */
-public class TxSavepointsAtomicCacheTest extends TxSavepointsTest {
+/** */
+public class TxSavepointsAtomicCacheTest extends GridCommonAbstractTest {
 
-    /**
-     * @throws Exception If failed.
-     */
-    public void testAtomicLocal() throws Exception {
-        checkSavepoints(ATOMIC, LOCAL);
+    /** {@inheritDoc} */
+    @Override protected void beforeTestsStarted() throws Exception {
+        super.beforeTestsStarted();
+
+        startGrid();
+    }
+
+    /** {@inheritDoc} */
+    @Override protected void afterTestsStopped() throws Exception {
+        super.afterTestsStopped();
+
+        stopAllGrids();
+    }
+
+    /** */
+    private CacheConfiguration<Integer, Integer> getConfig(CacheMode cacheMode) {
+        CacheConfiguration<Integer, Integer> cfg = new CacheConfiguration<>();
+
+        cfg.setAtomicityMode(ATOMIC);
+
+        cfg.setCacheMode(cacheMode);
+
+        cfg.setName(cacheMode.name());
+
+        return cfg;
     }
 
     /**
      * @throws Exception If failed.
      */
-    public void testAtomicReplicated() throws Exception {
-        checkSavepoints(ATOMIC, REPLICATED);
+    public void testPut() throws Exception {
+        for (CacheMode cacheMode : CacheMode.values()) {
+            IgniteCache<Integer, Integer> cache = grid().getOrCreateCache(getConfig(cacheMode));
+
+            for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+                for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                    cache.remove(1);
+
+                    try (Transaction tx = grid().transactions().txStart(concurrency, isolation)) {
+                        tx.savepoint("sp");
+
+                        cache.put(1, 1);
+
+                        tx.rollbackToSavepoint("sp");
+
+                        tx.commit();
+                    }
+
+                    assertEquals("Broken rollback to savepoint in " + concurrency + " " + isolation + " transaction.", (Integer) 1, cache.get(1));
+                }
+        }
     }
 
     /**
      * @throws Exception If failed.
      */
-    public void testAtomicPartitioned() throws Exception {
-        checkSavepoints(ATOMIC, PARTITIONED);
-    }
+    public void testRemove() throws Exception {
+        for (CacheMode cacheMode : CacheMode.values()) {
+            IgniteCache<Integer, Integer> cache = grid().getOrCreateCache(getConfig(cacheMode));
 
-    /**
-     * @throws Exception If failed.
-     */
-    public void testAtomicLocalMultipleCaches() throws Exception {
-        checkSavepointsWithTwoCaches(ATOMIC, LOCAL);
-    }
+            for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+                for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                    cache.put(1, 1);
 
-    /**
-     * @throws Exception If failed.
-     */
-    public void testAtomicReplicatedMultipleCaches() throws Exception {
-        checkSavepointsWithTwoCaches(ATOMIC, REPLICATED);
-    }
+                    try (Transaction tx = grid().transactions().txStart(concurrency, isolation)) {
+                        tx.savepoint("sp");
 
-    /**
-     * @throws Exception If failed.
-     */
-    public void testAtomicPartitionedMultipleCaches() throws Exception {
-        checkSavepointsWithTwoCaches(ATOMIC, PARTITIONED);
+                        cache.remove(1);
+
+                        tx.rollbackToSavepoint("sp");
+
+                        tx.commit();
+                    }
+
+                    assertEquals("Broken rollback to savepoint in " + concurrency + " " + isolation + " transaction.", null, cache.get(1));
+                }
+        }
     }
 }
