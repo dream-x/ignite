@@ -19,6 +19,7 @@ package org.apache.ignite.internal.processors.cache.transactions;
 
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.IgniteCountDownLatch;
+import org.apache.ignite.IgniteException;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.testframework.GridTestSafeThreadFactory;
@@ -27,6 +28,7 @@ import org.apache.ignite.transactions.Transaction;
 import org.apache.ignite.transactions.TransactionConcurrency;
 import org.apache.ignite.transactions.TransactionIsolation;
 
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
 import static org.apache.ignite.cache.CacheAtomicityMode.TRANSACTIONAL;
@@ -63,9 +65,6 @@ public abstract class TxSavepointsTransactionalCacheTest extends GridCommonAbstr
     /** Override this method to use different cache modes for tests.*/
     protected abstract CacheMode cacheMode();
 
-    /** */
-    private volatile Throwable err;
-
     /**
      * @throws Exception If failed.
      */
@@ -74,64 +73,31 @@ public abstract class TxSavepointsTransactionalCacheTest extends GridCommonAbstr
 
         GridTestSafeThreadFactory factory = new GridTestSafeThreadFactory(cacheMode().name()+"_get");
 
-        err = null;
-
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                IgniteCountDownLatch latch1 = grid().countDownLatch("firstWait", 1, true, true);
+                cache.remove(1);
 
-                IgniteCountDownLatch latch2 = grid().countDownLatch("secondWait", 1, true, true);
+                try (Transaction tx = grid().transactions().txStart(concurrency, isolation)) {
+                    tx.savepoint("sp");
 
-                IgniteCountDownLatch finishLatch = grid().countDownLatch("finishLatch", 2, true, true);
+                    assertEquals("Broken savepoint in " + concurrency + " " + isolation +
+                        " transaction.", null, cache.get(1));
 
-                factory.newThread(new Runnable() {
-                    @Override public void run() {
-                        cache.remove(1);
+                    tx.rollbackToSavepoint("sp");
 
-                        try (Transaction tx = grid().transactions().txStart(concurrency, isolation)) {
-                            tx.savepoint("sp");
-
-                            assertEquals("Broken savepoint in " + concurrency + " " + isolation +
-                                " transaction.", null, cache.get(1));
-
-                            tx.rollbackToSavepoint("sp");
-
-                            latch2.countDown();
-
-                            latch1.await();
-
-                            assertEquals("Broken multithreaded rollback to savepoint in " + concurrency +
-                                " " + isolation + " transaction.", (Integer) 1, cache.get(1));
-
-                            finishLatch.countDown();
-                        } catch (AssertionError e) {
-                            err = e;
-
-                            latch2.countDown();
-
-                            finishLatch.countDown();
-                        }
-                    }
-                }).start();
-
-                factory.newThread(new Runnable() {
-                    @Override public void run() {
-                        try {
-                            latch2.await();
-
+                    Thread t = factory.newThread(new Runnable() {
+                        @Override public void run() {
                             cache.put(1, 1);
-
-                            latch1.countDown();
-
-                            finishLatch.countDown();
-                        } catch (Throwable t) {
-                            err = t;
                         }
-                    }
-                }).start();
+                    });
 
-                while (!finishLatch.await(2_000))
-                    assertNull(err);
+                    t.start();
+
+                    t.join();
+
+                    assertEquals("Broken multithreaded rollback to savepoint in " + concurrency +
+                        " " + isolation + " transaction.", (Integer) 1, cache.get(1));
+                }
             }
     }
 
@@ -143,74 +109,36 @@ public abstract class TxSavepointsTransactionalCacheTest extends GridCommonAbstr
 
         GridTestSafeThreadFactory factory = new GridTestSafeThreadFactory(cacheMode().name()+"_put");
 
-        err = null;
-
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                IgniteCountDownLatch latch1 = grid().countDownLatch("firstWait", 1, true, true);
+                cache.remove(1);
 
-                IgniteCountDownLatch latch2 = grid().countDownLatch("secondWait", 1, true, true);
+                try (Transaction tx = grid().transactions().txStart(concurrency, isolation)) {
+                    tx.savepoint("sp");
 
-                IgniteCountDownLatch finishLatch = grid().countDownLatch("finishLatch", 2, true, true);
+                    assertTrue(cache.putIfAbsent(1, 0));
 
-                factory.newThread(new Runnable() {
-                    @Override public void run() {
-                        cache.remove(1);
-
-                        try (Transaction tx = grid().transactions().txStart(concurrency, isolation)) {
-                            tx.savepoint("sp");
-
-                            assertTrue(cache.putIfAbsent(1, 0));
-
-                            latch2.countDown();
-
-                            Thread.sleep(1_000);
-
-                            tx.rollbackToSavepoint("sp");
-
-                            latch1.await();
-
-                            assertEquals("Broken multithreaded rollback to savepoint in " + concurrency +
-                                " " + isolation + " transaction.",  (Integer) 1, cache.get(1));
-
-                            finishLatch.countDown();
-                        } catch (InterruptedException e) {
-                            log().error(concurrency + " " + isolation +
-                                " transaction was interrupted during sleep.", e);
-
-                            err = e;
-
-                            latch2.countDown();
-
-                            finishLatch.countDown();
-                        } catch (AssertionError e) {
-                            err = e;
-
-                            latch2.countDown();
-
-                            finishLatch.countDown();
-                        }
-                    }
-                }).start();
-
-                factory.newThread(new Runnable() {
-                    @Override public void run() {
-                        try {
-                            latch2.await();
-
+                    Thread t = factory.newThread(new Runnable() {
+                        @Override public void run() {
                             assertTrue(cache.putIfAbsent(1, 1));
-
-                            latch1.countDown();
-
-                            finishLatch.countDown();
-                        } catch (Throwable t) {
-                            err = t;
                         }
-                    }
-                }).start();
+                    });
 
-                while (!finishLatch.await(2_000))
-                    assertNull(err);
+                    t.start();
+
+                    //we need to wait some time to make sure that second thread trying to get lock.
+                    for (int i = 2; i < 1_000; i++)
+                        cache.putIfAbsent(i, 0);
+
+                    tx.rollbackToSavepoint("sp");
+
+                    t.join();
+
+                    assertEquals("Broken multithreaded rollback to savepoint in " + concurrency +
+                        " " + isolation + " transaction.",  (Integer) 1, cache.get(1));
+
+                    tx.commit();
+                }
 
                 assertEquals("Broken rollback to savepoint in " + concurrency + " " + isolation +
                     " transaction.",  (Integer) 1, cache.get(1));
@@ -225,74 +153,36 @@ public abstract class TxSavepointsTransactionalCacheTest extends GridCommonAbstr
 
         GridTestSafeThreadFactory factory = new GridTestSafeThreadFactory(cacheMode().name()+"_remove");
 
-        err = null;
-
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                IgniteCountDownLatch latch1 = grid().countDownLatch("firstWait", 1, true, true);
+                cache.put(1, 1);
 
-                IgniteCountDownLatch latch2 = grid().countDownLatch("secondWait", 1, true, true);
+                try (Transaction tx = grid().transactions().txStart(concurrency, isolation)) {
+                    tx.savepoint("sp");
 
-                IgniteCountDownLatch finishLatch = grid().countDownLatch("finishLatch", 2, true, true);
+                    assertTrue(cache.remove(1));
 
-                factory.newThread(new Runnable() {
-                    @Override public void run() {
-                        cache.put(1, 1);
-
-                        try (Transaction tx = grid().transactions().txStart(concurrency, isolation)) {
-                            tx.savepoint("sp");
-
-                            assertTrue(cache.remove(1));
-
-                            latch2.countDown();
-
-                            Thread.sleep(1_000);
-
-                            tx.rollbackToSavepoint("sp");
-
-                            latch1.await();
-
-                            assertEquals("Broken multithreaded rollback to savepoint in " + concurrency +
-                                " " + isolation + " transaction.",  null, cache.get(1));
-
-                            finishLatch.countDown();
-                        } catch (InterruptedException e) {
-                            log().error(concurrency + " " + isolation +
-                                " transaction was interrupted during sleep.", e);
-
-                            err = e;
-
-                            latch2.countDown();
-
-                            finishLatch.countDown();
-                        } catch (AssertionError e) {
-                            err = e;
-
-                            latch2.countDown();
-
-                            finishLatch.countDown();
-                        }
-                    }
-                }).start();
-
-                factory.newThread(new Runnable() {
-                    @Override public void run() {
-                        try {
-                            latch2.await();
-
+                    Thread t = factory.newThread(new Runnable() {
+                        @Override public void run() {
                             assertTrue(cache.remove(1, 1));
-
-                            latch1.countDown();
-
-                            finishLatch.countDown();
-                        } catch (Throwable t) {
-                            err = t;
                         }
-                    }
-                }).start();
+                    });
 
-                while (!finishLatch.await(2_000))
-                    assertNull(err);
+                    t.start();
+
+                    //we need to wait some time to make sure that second thread trying to get lock.
+                    for (int i = 2; i < 1_000; i++)
+                        cache.putIfAbsent(i, 0);
+
+                    tx.rollbackToSavepoint("sp");
+
+                    t.join();
+
+                    assertEquals("Broken multithreaded rollback to savepoint in " + concurrency +
+                        " " + isolation + " transaction.",  null, cache.get(1));
+
+                    tx.commit();
+                }
 
                 assertEquals("Broken rollback to savepoint in " + concurrency + " " + isolation +
                     " transaction.",  null, cache.get(1));
