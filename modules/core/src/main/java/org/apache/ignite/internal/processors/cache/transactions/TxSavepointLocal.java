@@ -81,7 +81,7 @@ public class TxSavepointLocal implements TxSavepoint {
 
             e.cached(entry.cached());
 
-            if (tx.pessimistic() && entry.locked())
+            if (entry.locked())
                 e.markLocked();
 
             to.put(entry.txKey(), e);

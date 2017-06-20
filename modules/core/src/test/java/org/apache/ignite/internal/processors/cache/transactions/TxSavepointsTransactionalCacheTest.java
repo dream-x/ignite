@@ -83,7 +83,7 @@ public abstract class TxSavepointsTransactionalCacheTest extends GridCommonAbstr
                 IgniteCountDownLatch latch2 = grid().countDownLatch("secondWait", 1, true, true);
 
                 IgniteCountDownLatch finishLatch = grid().countDownLatch("finishLatch", 2, true, true);
-                CyclicBarrier barrier = new CyclicBarrier(3);
+
                 factory.newThread(new Runnable() {
                     @Override public void run() {
                         cache.remove(1);

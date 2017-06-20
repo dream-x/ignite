@@ -503,8 +503,6 @@ public class IgniteTxStateImpl extends IgniteTxLocalStateAdapter {
         GridCacheSharedContext cctx,
         IgniteInternalTx tx
     ) {
-        assert txSavepoint instanceof TxSavepointLocal : "Class IgniteTxStateImpl used not in local transaction. " +
-            "[TxSavepoint=" + txSavepoint + ", tx=" + tx + ']';
         assert cctx != null;
         assert tx != null;
 
