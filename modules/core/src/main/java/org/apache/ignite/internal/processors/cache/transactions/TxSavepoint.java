@@ -62,7 +62,6 @@ package org.apache.ignite.internal.processors.cache.transactions;
  * </ul>
  */
 public interface TxSavepoint {
-
     /**
      * @return Savepoint ID.
      */

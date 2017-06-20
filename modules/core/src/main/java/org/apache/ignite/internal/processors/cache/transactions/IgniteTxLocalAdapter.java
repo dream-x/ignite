@@ -1680,7 +1680,8 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      *
      * @param <T> Return type.
      */
-    protected abstract class PostLockClosure2<T> implements IgniteBiClosure<Boolean, Exception, IgniteInternalFuture<T>> {
+    protected abstract class PostLockClosure2<T>
+        implements IgniteBiClosure<Boolean, Exception, IgniteInternalFuture<T>> {
         /** */
         private static final long serialVersionUID = 0L;
 

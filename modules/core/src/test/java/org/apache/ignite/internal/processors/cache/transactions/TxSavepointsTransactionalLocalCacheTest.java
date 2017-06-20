@@ -21,7 +21,6 @@ import org.apache.ignite.cache.CacheMode;
 
 /** */
 public class TxSavepointsTransactionalLocalCacheTest extends TxSavepointsTransactionalCacheTest {
-
     /** {@inheritDoc}*/
     @Override protected CacheMode cacheMode() {
         return CacheMode.LOCAL;

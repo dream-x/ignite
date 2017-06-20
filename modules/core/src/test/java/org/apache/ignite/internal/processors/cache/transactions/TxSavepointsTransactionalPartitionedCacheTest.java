@@ -21,7 +21,6 @@ import org.apache.ignite.cache.CacheMode;
 
 /** */
 public class TxSavepointsTransactionalPartitionedCacheTest extends TxSavepointsTransactionalCacheTest {
-
     /** {@inheritDoc}*/
     @Override protected CacheMode cacheMode() {
         return CacheMode.PARTITIONED;

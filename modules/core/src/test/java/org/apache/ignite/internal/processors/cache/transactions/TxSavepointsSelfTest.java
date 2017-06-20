@@ -29,12 +29,12 @@ import org.apache.ignite.transactions.TransactionConcurrency;
 import org.apache.ignite.transactions.TransactionIsolation;
 
 import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
+import static org.apache.ignite.cache.CacheAtomicityMode.TRANSACTIONAL;
 
 /**
  *
  */
 public class TxSavepointsSelfTest extends GridCommonAbstractTest {
-
     /** */
     private IgniteCache<Integer, Integer> cache;
 
@@ -48,7 +48,9 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
 
         cfg.setDiscoverySpi(disc);
 
-        cfg.setCacheConfiguration(new CacheConfiguration().setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL).setName(DEFAULT_CACHE_NAME));
+        cfg.setCacheConfiguration(new CacheConfiguration()
+            .setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL)
+            .setName(DEFAULT_CACHE_NAME));
 
         return cfg;
     }
@@ -73,18 +75,18 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     public void testSavepoints() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                cache.put(2, 0);
+                cache.put(1, 0);
 
                 try (Transaction tx = grid(0).transactions().txStart(concurrency, isolation)) {
-                    cache.put(2, 1);
+                    cache.put(1, 1);
 
                     tx.savepoint("s1");
 
-                    cache.put(2, 2);
+                    cache.put(1, 2);
 
                     tx.savepoint("s2");
 
-                    cache.put(2, 3);
+                    cache.put(1, 3);
 
                     tx.savepoint("s3");
 
@@ -93,7 +95,8 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
                     tx.commit();
                 }
 
-                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.",
+                    (Integer) 2, cache.get(1));
             }
     }
 
@@ -103,26 +106,26 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     public void testFailRollbackToSavepoint() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                cache.put(2, 0);
+                cache.put(1, 0);
 
                 Exception err = null;
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    cache.put(2, 1);
+                    cache.put(1, 1);
 
                     tx.savepoint("s1");
 
-                    cache.put(2, 2);
+                    cache.put(1, 2);
 
                     tx.savepoint("s2");
 
-                    cache.put(2, 3);
+                    cache.put(1, 3);
 
                     tx.savepoint("s3");
 
                     tx.rollbackToSavepoint("s2");
 
-                    assertEquals((Integer) 2, cache.get(2));
+                    assertEquals((Integer) 2, cache.get(1));
 
                     tx.rollbackToSavepoint("s3");
                 } catch (Exception e) {
@@ -142,18 +145,18 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     public void testReleaseSavepoints() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                cache.put(2, 0);
+                cache.put(1, 0);
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    cache.put(2, 1);
+                    cache.put(1, 1);
 
                     tx.savepoint("s1");
 
-                    cache.put(2, 2);
+                    cache.put(1, 2);
 
                     tx.savepoint("s2");
 
-                    cache.put(2, 3);
+                    cache.put(1, 3);
 
                     tx.savepoint("s3");
 
@@ -166,7 +169,8 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
                     tx.commit();
                 }
 
-                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.",
+                    (Integer) 2, cache.get(1));
             }
     }
 
@@ -176,31 +180,32 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     public void testMultipleRollbackToSavepoint() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                cache.put(2, 0);
+                cache.put(1, 0);
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    cache.put(2, 1);
+                    cache.put(1, 1);
 
                     tx.savepoint("s1");
 
-                    cache.put(2, 2);
+                    cache.put(1, 2);
 
                     tx.savepoint("s2");
 
-                    cache.put(2, 3);
+                    cache.put(1, 3);
 
                     tx.savepoint("s3");
 
                     tx.rollbackToSavepoint("s2");
 
-                    cache.put(2, 3);
+                    cache.put(1, 3);
 
                     tx.rollbackToSavepoint("s2");
 
                     tx.commit();
                 }
 
-                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.",
+                    (Integer) 2, cache.get(1));
             }
     }
 
@@ -211,15 +216,15 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    cache.put(2, 1);
+                    cache.put(1, 1);
 
                     tx.savepoint("s1");
 
-                    cache.put(2, 2);
+                    cache.put(1, 2);
 
                     tx.savepoint("s2");
 
-                    cache.put(2, 3);
+                    cache.put(1, 3);
 
                     tx.savepoint("s3");
 
@@ -230,48 +235,50 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
                     tx.rollback();
                 }
 
-                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", null, cache.get(2));
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.",
+                    null, cache.get(1));
             }
     }
 
     /**
-     * Tests two caches with different atomicity.
+     * Tests two caches within one transaction.
      */
     public void testMultiCaches() {
         IgniteCache<Integer, Integer> cache1 = grid(0)
             .createCache(new CacheConfiguration<Integer, Integer>(cache.getConfiguration(CacheConfiguration.class))
-                .setAtomicityMode(ATOMIC)
                 .setName("Second Cache"));
 
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
-                cache.put(2, 0);
-                cache1.put(2, 0);
+                cache.put(1, 0);
+                cache1.put(1, 0);
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
-                    cache1.put(2, 1);
+                    cache.put(1, 1);
 
-                    cache.put(2, 1);
+                    cache1.put(1, 1);
 
                     tx.savepoint("s1");
 
-                    cache.put(2, 2);
+                    cache.put(1, 2);
 
                     tx.savepoint("s2");
 
-                    cache.put(2, 3);
+                    cache.put(1, 3);
 
                     tx.savepoint("s3");;
 
-                    cache1.put(2, 2);
+                    cache1.put(1, 2);
 
                     tx.rollbackToSavepoint("s2");
 
                     tx.commit();
                 }
 
-                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache.get(2));
-                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.", (Integer) 2, cache1.get(2));
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.",
+                    (Integer) 2, cache.get(1));
+                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.",
+                    (Integer) 1, cache1.get(1));
             }
     }
 }

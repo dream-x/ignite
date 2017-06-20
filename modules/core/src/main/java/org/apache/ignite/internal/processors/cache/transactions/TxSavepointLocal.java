@@ -26,7 +26,6 @@ import java.util.Map;
  * Transaction savepoint implementation for near local transactions.
  */
 public class TxSavepointLocal implements TxSavepoint {
-
     /** Savepoint ID */
     @GridToStringInclude
     private final String name;

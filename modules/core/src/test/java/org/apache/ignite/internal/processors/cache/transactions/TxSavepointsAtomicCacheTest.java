@@ -29,7 +29,6 @@ import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
 
 /** */
 public class TxSavepointsAtomicCacheTest extends GridCommonAbstractTest {
-
     /** {@inheritDoc} */
     @Override protected void beforeTestsStarted() throws Exception {
         super.beforeTestsStarted();
@@ -78,7 +77,8 @@ public class TxSavepointsAtomicCacheTest extends GridCommonAbstractTest {
                         tx.commit();
                     }
 
-                    assertEquals("Broken rollback to savepoint in " + concurrency + " " + isolation + " transaction.", (Integer) 1, cache.get(1));
+                    assertEquals("Broken rollback to savepoint in " +
+                        concurrency + " " + isolation + " transaction.", (Integer) 1, cache.get(1));
                 }
         }
     }
@@ -104,7 +104,8 @@ public class TxSavepointsAtomicCacheTest extends GridCommonAbstractTest {
                         tx.commit();
                     }
 
-                    assertEquals("Broken rollback to savepoint in " + concurrency + " " + isolation + " transaction.", null, cache.get(1));
+                    assertEquals("Broken rollback to savepoint in " +
+                        concurrency + " " + isolation + " transaction.", null, cache.get(1));
                 }
         }
     }
