@@ -147,6 +147,11 @@ public class TestTransaction implements Transaction {
     }
 
     /** {@inheritDoc} */
+    @Override public void savepoint(String name, boolean overwrite) throws IllegalArgumentException {
+        // No-op.
+    }
+
+    /** {@inheritDoc} */
     @Override public void rollbackToSavepoint(String name) {
         // No-op.
     }

@@ -639,8 +639,10 @@ public interface IgniteInternalTx {
      * Creates savepoint.
      *
      * @param name Savepoint ID.
+     * @param overwrite If true - already created savepoint with the same name will be replaced.
+     * If false - exception will be thrown if savepoint with such name already exist.
      */
-    public void savepoint(String name);
+    public void savepoint(String name, boolean overwrite);
 
     /**
      * Rollback this transaction to previous state.

@@ -294,9 +294,27 @@ public interface Transaction extends AutoCloseable, IgniteAsyncSupport {
      * After a savepoint has been created, you can either continue processing,
      * commit your work, roll back the entire transaction, or roll back to the savepoint.
      *
-     * @param name savepoint ID
+     * @param name savepoint ID.
+     * @throws IllegalArgumentException If savepoint with such name already exists.
      */
-    public void savepoint(String name);
+    public void savepoint(String name) throws IllegalArgumentException;
+
+    /**
+     * Use this method to identify a point in a transaction to which you can later roll back.
+     * <p>
+     * Savepoint names must be distinct within a given transaction.
+     * If you create a second savepoint with the same identifier as an earlier savepoint,
+     * then the earlier savepoint is erased.
+     * <p>
+     * After a savepoint has been created, you can either continue processing,
+     * commit your work, roll back the entire transaction, or roll back to the savepoint.
+     *
+     * @param name savepoint ID
+     * @param overwrite If true - already created savepoint with the same name will be replaced.
+     * If false - exception will be thrown if savepoint with such name already exist.
+     * @throws IllegalArgumentException If savepoint with such name already exists and overwrite is false.
+     */
+    public void savepoint(String name, boolean overwrite) throws IllegalArgumentException;
 
     /**
      * Rolls back just the portion of the transaction after the savepoint.
@@ -304,14 +322,14 @@ public interface Transaction extends AutoCloseable, IgniteAsyncSupport {
      * Erases all savepoints created after that savepoint. The named savepoint is retained,
      * so you can roll back to the same savepoint multiple times. Prior savepoints are also retained.
      *
-     * @param name savepoint ID
+     * @param name savepoint ID.
      */
     public void rollbackToSavepoint(String name);
 
     /**
      * Removes named savepoint and makes it unavailable as a rollback point.
      *
-     * @param name
+     * @param name Savepoint ID.
      */
     public void releaseSavepoint(String name);
 }

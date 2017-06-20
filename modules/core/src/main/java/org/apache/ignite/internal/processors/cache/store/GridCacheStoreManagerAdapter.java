@@ -1406,6 +1406,11 @@ public abstract class GridCacheStoreManagerAdapter extends GridCacheManagerAdapt
         }
 
         /** {@inheritDoc} */
+        @Override public void savepoint(String name, boolean overwrite) throws IllegalArgumentException {
+            throw new UnsupportedOperationException();
+        }
+
+        /** {@inheritDoc} */
         @Override public void rollbackToSavepoint(String name) {
             throw new UnsupportedOperationException();
         }

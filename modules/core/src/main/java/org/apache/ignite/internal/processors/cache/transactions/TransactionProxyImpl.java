@@ -379,7 +379,12 @@ public class TransactionProxyImpl<K, V> implements TransactionProxy, Externaliza
     }
 
     /** {@inheritDoc} */
-    @Override public void savepoint(String name) {
+    @Override public void savepoint(String name) throws IllegalArgumentException {
+        savepoint(name, false);
+    }
+
+    /** {@inheritDoc} */
+    @Override public void savepoint(String name, boolean overwrite) throws IllegalArgumentException {
         if (implicit())
             throw new IllegalStateException("Savepoints must be used inside explicit transactions.");
 
@@ -388,7 +393,7 @@ public class TransactionProxyImpl<K, V> implements TransactionProxy, Externaliza
         try {
             tx.txState().awaitLastFut(cctx);
 
-            tx.savepoint(name);
+            tx.savepoint(name, overwrite);
         } finally {
             leave();
         }

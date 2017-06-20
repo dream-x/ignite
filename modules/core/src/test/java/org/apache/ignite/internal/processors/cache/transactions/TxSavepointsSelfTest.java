@@ -142,10 +142,12 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
     /**
      * Tests savepoint deleting.
      */
-    public void testReleaseSavepoints() {
+    public void testOwerwriteSavepoints() {
         for (TransactionConcurrency concurrency : TransactionConcurrency.values())
             for (TransactionIsolation isolation : TransactionIsolation.values()) {
                 cache.put(1, 0);
+
+                IllegalArgumentException exception = null;
 
                 try (Transaction tx = grid(0).transactions().txStart()) {
                     cache.put(1, 1);
@@ -160,17 +162,38 @@ public class TxSavepointsSelfTest extends GridCommonAbstractTest {
 
                     tx.savepoint("s3");
 
-                    tx.releaseSavepoint("s1");
-
-                    tx.releaseSavepoint("s3");
+                    tx.savepoint("s1", true);
 
                     tx.rollbackToSavepoint("s2");
-
-                    tx.commit();
+                } catch (IllegalArgumentException e) {
+                    exception = e;
                 }
 
-                assertEquals("Failed in "+concurrency+' '+isolation+" transaction.",
-                    (Integer) 2, cache.get(1));
+                assertTrue(exception != null && exception.getMessage().startsWith("No such savepoint"));
+            }
+    }
+
+    /**
+     * Tests savepoint deleting.
+     */
+    public void testFailOwerwriteSavepoints() {
+        for (TransactionConcurrency concurrency : TransactionConcurrency.values())
+            for (TransactionIsolation isolation : TransactionIsolation.values()) {
+                cache.put(1, 0);
+
+                IllegalArgumentException exception = null;
+
+                try (Transaction tx = grid(0).transactions().txStart()) {
+                    cache.put(1, 1);
+
+                    tx.savepoint("s1");
+
+                    tx.savepoint("s1");
+                } catch (IllegalArgumentException e) {
+                    exception = e;
+                }
+
+                assertTrue(exception != null && exception.getMessage().startsWith("Savepoint \"s1\" already exist"));
             }
     }
 

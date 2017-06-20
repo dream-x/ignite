@@ -890,7 +890,7 @@ public abstract class IgniteTxAdapter extends GridMetadataAwareAdapter implement
     }
 
     /** {@inheritDoc} */
-    @Override public void savepoint(String name) {
+    @Override public void savepoint(String name, boolean overwrite) {
         throw new UnsupportedOperationException();
     }
 
@@ -1967,7 +1967,7 @@ public abstract class IgniteTxAdapter extends GridMetadataAwareAdapter implement
         }
 
         /** {@inheritDoc} */
-        @Override public void savepoint(String name) {
+        @Override public void savepoint(String name, boolean overwrite) {
             throw new IllegalStateException("Deserialized transaction can only be used as read-only.");
         }
 

@@ -150,7 +150,7 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
     protected CacheWriteSynchronizationMode syncMode;
 
     /** List of savepoints for this transaction, which is used to retrieve previous states. */
-    protected LinkedList<TxSavepointLocal> savepoints = new LinkedList<>();
+    protected LinkedList<TxSavepointLocal> savepoints;
 
     /**
      * Empty constructor required for {@link Externalizable}.
@@ -1764,18 +1764,30 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
         protected abstract IgniteInternalFuture<T> postMiss(T t) throws IgniteCheckedException;
     }
 
+    private void addSavepoint(TxSavepointLocal savepoint) {
+        if (savepoints == null)
+            savepoints = new LinkedList<>();
+
+        savepoints.add(savepoint);
+    }
+
     /**
      * Creates savepoint.
      *
      * @param name Savepoint ID.
      */
-    @Override public void savepoint(String name) {
+    @Override public void savepoint(String name, boolean overwrite) {
+        TxSavepointLocal savepoint = releaseSavepoints(name);
+
+        if (savepoint != null && !overwrite)
+            throw new IllegalArgumentException("Savepoint \"" + name + "\" already exist. " +
+                "Savepoints with the same name aren't available. " +
+                "If you want to rewrite savepoints - use savepoint(name, true) method.");
+
+        addSavepoint(new TxSavepointLocal(name, this));
+
         if (log.isDebugEnabled())
             log.debug("Saving point created [savepoint=" + name + ", tx=" + this + ']');
-
-        releaseSavepoint(name, false);
-
-        savepoints.add(new TxSavepointLocal(name, this));
     }
 
     /**
@@ -1787,14 +1799,14 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
         if (log.isDebugEnabled())
             log.debug("Rolling back to savepoint [savepoint=" + name + ", tx=" + this + ']');
 
-        TxSavepointLocal savepoint = releaseSavepoint(name, true);
+        TxSavepointLocal savepoint = releaseSavepoints(name);
 
         if (savepoint == null)
             throw new IllegalArgumentException("No such savepoint.");
 
         txState.rollbackToSavepoint(savepoint, cctx, this);
 
-        savepoints.add(savepoint);
+        addSavepoint(savepoint);
     }
 
     /**
@@ -1806,17 +1818,19 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
         if (log.isDebugEnabled())
             log.debug("Releasing savepoint [savepoint=" + name + ", tx=" + this + ']');
 
-        releaseSavepoint(name, false);
+        releaseSavepoints(name);
     }
 
     /**
-     * Delete savepoint.
+     * Delete named savepoint and all subsequent savepoints.
      *
      * @param name Savepoint ID.
-     * @param removeSubsequentSavepoints Release savepoints after chosen or not.
      * @return The previous value associated with ID, or null if there was no such savepoint.
      */
-    private TxSavepointLocal releaseSavepoint(String name, boolean removeSubsequentSavepoints) {
+    private TxSavepointLocal releaseSavepoints(String name) {
+        if (savepoints == null)
+            return null;
+
         boolean remove = false;
 
         TxSavepointLocal savepoint = null;
@@ -1835,11 +1849,9 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
         if (savepoint != null) {
             i.remove();
 
-            if (removeSubsequentSavepoints) {
-                while (i.hasNext()) {
-                    i.next();
-                    i.remove();
-                }
+            while (i.hasNext()) {
+                i.next();
+                i.remove();
             }
         }
 
