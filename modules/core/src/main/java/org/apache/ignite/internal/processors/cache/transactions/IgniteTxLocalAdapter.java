@@ -21,6 +21,8 @@ import java.io.Externalizable;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedList;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -147,6 +149,9 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
 
     /** */
     protected CacheWriteSynchronizationMode syncMode;
+
+    /** List of savepoints for this transaction, which is used to retrieve previous states. */
+    protected LinkedList<TxSavepointLocal> savepoints;
 
     /**
      * Empty constructor required for {@link Externalizable}.
@@ -1690,7 +1695,8 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
      *
      * @param <T> Return type.
      */
-    protected abstract class PostLockClosure2<T> implements IgniteBiClosure<Boolean, Exception, IgniteInternalFuture<T>> {
+    protected abstract class PostLockClosure2<T>
+        implements IgniteBiClosure<Boolean, Exception, IgniteInternalFuture<T>> {
         /** */
         private static final long serialVersionUID = 0L;
 
@@ -1771,5 +1777,99 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
          * @throws IgniteCheckedException If operation failed.
          */
         protected abstract IgniteInternalFuture<T> postMiss(T t) throws IgniteCheckedException;
+    }
+
+    private void addSavepoint(TxSavepointLocal savepoint) {
+        if (savepoints == null)
+            savepoints = new LinkedList<>();
+
+        savepoints.add(savepoint);
+    }
+
+    /**
+     * Creates savepoint.
+     *
+     * @param name Savepoint ID.
+     */
+    @Override public void savepoint(String name, boolean overwrite) {
+        TxSavepointLocal savepoint = releaseSavepoints(name);
+
+        if (savepoint != null && !overwrite)
+            throw new IllegalArgumentException("Savepoint \"" + name + "\" already exist. " +
+                "Savepoints with the same name aren't available. " +
+                "If you want to rewrite savepoints - use savepoint(name, true) method.");
+
+        addSavepoint(new TxSavepointLocal(name, this));
+
+        if (log.isDebugEnabled())
+            log.debug("Saving point created [savepoint=" + name + ", tx=" + this + ']');
+    }
+
+    /**
+     * Returns transaction to previously saved state.
+     *
+     * @param name Savepoint ID.
+     */
+    @Override public void rollbackToSavepoint(String name) {
+        if (log.isDebugEnabled())
+            log.debug("Rolling back to savepoint [savepoint=" + name + ", tx=" + this + ']');
+
+        TxSavepointLocal savepoint = releaseSavepoints(name);
+
+        if (savepoint == null)
+            throw new IllegalArgumentException("No such savepoint.");
+
+        txState.rollbackToSavepoint(savepoint, cctx, this);
+
+        addSavepoint(savepoint);
+    }
+
+    /**
+     * Release savepoint and remove it from savepoint list. Rallback to this savepoint will be unavailable.
+     *
+     * @param name Savepoint ID.
+     */
+    @Override public void releaseSavepoint(String name) {
+        if (log.isDebugEnabled())
+            log.debug("Releasing savepoint [savepoint=" + name + ", tx=" + this + ']');
+
+        releaseSavepoints(name);
+    }
+
+    /**
+     * Delete named savepoint and all subsequent savepoints.
+     *
+     * @param name Savepoint ID.
+     * @return The previous value associated with ID, or null if there was no such savepoint.
+     */
+    private TxSavepointLocal releaseSavepoints(String name) {
+        if (savepoints == null)
+            return null;
+
+        boolean remove = false;
+
+        TxSavepointLocal savepoint = null;
+
+        ListIterator<TxSavepointLocal> i = savepoints.listIterator(savepoints.size());
+
+        while(i.hasPrevious()) {
+            TxSavepointLocal s = i.previous();
+            if (s.getName().equals(name)) {
+                savepoint = s;
+
+                break;
+            }
+        }
+
+        if (savepoint != null) {
+            i.remove();
+
+            while (i.hasNext()) {
+                i.next();
+                i.remove();
+            }
+        }
+
+        return savepoint;
     }
 }

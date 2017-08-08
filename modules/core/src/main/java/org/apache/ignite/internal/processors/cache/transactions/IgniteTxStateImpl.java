@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import org.apache.ignite.IgniteCheckedException;
+import org.apache.ignite.IgniteException;
 import org.apache.ignite.cache.CacheInterceptor;
 import org.apache.ignite.cache.CacheWriteSynchronizationMode;
 import org.apache.ignite.internal.cluster.ClusterTopologyServerNotFoundException;
@@ -32,6 +33,7 @@ import org.apache.ignite.internal.processors.cache.CacheStoppedException;
 import org.apache.ignite.internal.managers.discovery.DiscoCache;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
+import org.apache.ignite.internal.processors.cache.GridCacheEntryRemovedException;
 import org.apache.ignite.internal.processors.cache.GridCacheSharedContext;
 import org.apache.ignite.internal.processors.cache.KeyCacheObject;
 import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtTopologyFuture;
@@ -464,5 +466,44 @@ public class IgniteTxStateImpl extends IgniteTxLocalStateAdapter {
     /** {@inheritDoc} */
     public String toString() {
         return S.toString(IgniteTxStateImpl.class, this, "txMap", allEntriesCopy());
+    }
+
+    /** {@inheritDoc} */
+    @Override public void rollbackToSavepoint(TxSavepoint txSavepoint,
+        GridCacheSharedContext cctx,
+        IgniteInternalTx tx
+    ) {
+        assert cctx != null;
+        assert tx != null;
+
+        if (txMap != null) {
+            TxSavepointLocal savepoint = (TxSavepointLocal) txSavepoint;
+
+            Map<IgniteTxKey, IgniteTxEntry> tmpMap = new HashMap<>(txMap);
+
+            txMap.clear();
+
+            savepoint.putCopies(savepoint.getTxMapSnapshot().values(), txMap, tx);
+
+            readView = new IgniteTxMap(txMap, CU.reads());
+
+            writeView = new IgniteTxMap(txMap, CU.writes());
+
+            for (Map.Entry<IgniteTxKey, IgniteTxEntry> entry : tmpMap.entrySet()) {
+                if (!savepoint.containsKey(entry.getKey()) && tx.pessimistic()) {
+                    try {
+                        entry.getValue().cached().txUnlock(tx);
+                    } catch (GridCacheEntryRemovedException e) {
+                        throw new IgniteException("Failed to unlock entry during rollback to savepoint. " +
+                            "Entry: " + entry.getValue() + "; transaction:" + tx, e);
+                    }
+                }
+            }
+        } else {
+            cctx.messageLogger().info("Nothing to rollback. " +
+                "Savepoints are available only for transactional caches on the same node as transaction. " +
+                "Atomic caches and caches from other nodes have nothing to save and rollback " +
+                "because they have non transactional behaviour.");
+        }
     }
 }
