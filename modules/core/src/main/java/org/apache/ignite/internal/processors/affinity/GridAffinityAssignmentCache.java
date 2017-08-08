@@ -351,14 +351,13 @@ public class GridAffinityAssignmentCache {
             float deltaBackup = Math.abs(1 - (float)localBackupCnt * nodesCnt / totalBackupCnt);
 
             if (deltaPrimary > ignitePartDistribution || deltaBackup > ignitePartDistribution) {
-                log.info("Local node affinity assignment distribution is not ideal " +
-                    "[cache=" + cacheOrGrpName + ", " +
-                    "expectedPrimary=" + String.format("%.2f", expectedCnt) +
-                    "(" + String.format("%.2f", expectedPercent) + "%), " +
-                    "expectedBackups=" + String.format("%.2f", expectedCnt * this.backups) +
-                    "(" + String.format("%.2f", expectedPercent * this.backups) + "%), " +
-                    "primary=" + localPrimaryCnt + "(" + String.format("%.2f", primaryPerNodePercent) + "%), " +
-                    "backups=" + localBackupCnt + "(" + String.format("%.2f", localBackupPercent) + "%)].");
+                log.info("Local node affinity assignment distribution is not ideal [cache=" + cacheOrGrpName +
+                    ", expectedPrimary=" + String.format("%.2f", expectedCnt) +
+                    "(" + String.format("%.2f", expectedPercent) +
+                    "%), expectedBackups=" + String.format("%.2f", expectedCnt * this.backups) +
+                    "(" + String.format("%.2f", expectedPercent * this.backups) +
+                    "%), primary=" + localPrimaryCnt + "(" + String.format("%.2f", primaryPerNodePercent) +
+                    "%), backups=" + localBackupCnt + "(" + String.format("%.2f", localBackupPercent) + "%)]");
             }
         }
     }
