@@ -22,6 +22,7 @@ import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.IgniteSystemProperties;
 import org.apache.ignite.cache.CacheAtomicityMode;
 import org.apache.ignite.cache.CacheMode;
+import org.apache.ignite.cache.affinity.rendezvous.RendezvousAffinityFunction;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;
 import org.apache.ignite.internal.IgniteKernal;
@@ -55,6 +56,12 @@ public class AffinityDistributionPrintLogTest extends GridCommonAbstractTest {
     }
 
     /** */
+    private int parts = 1024;
+
+    /** */
+    private String CHECK_MESSAGE = "Local node affinity assignment distribution is not ideal";
+
+    /** */
     private int backups = 2;
 
     /** */
@@ -85,6 +92,11 @@ public class AffinityDistributionPrintLogTest extends GridCommonAbstractTest {
         ccfg.setWriteSynchronizationMode(FULL_SYNC);
         ccfg.setNearConfiguration(null);
 
+        RendezvousAffinityFunction aff = new RendezvousAffinityFunction();
+        aff.setPartitions(parts);
+
+        ccfg.setAffinity(aff);
+
         cfg.setCacheConfiguration(ccfg);
 
         cfg.setClientMode(false);
@@ -95,38 +107,55 @@ public class AffinityDistributionPrintLogTest extends GridCommonAbstractTest {
     /**
      * @throws Exception If failed.
      */
-    public void testDistributionCalculationNotIdealMessage() throws Exception {
-        String log = print(true, 0.01);
+    public void testDistributionCalculationForThreePartitionsNotIdealMessage() throws Exception {
+        parts = 3;
 
-        assertTrue(log.contains("Local node affinity assignment distribution is not ideal"));
+        String log = print(false, 0.0, 1);
+
+        System.out.println("+++"+ log);
+
+        assertTrue(log.contains(CHECK_MESSAGE));
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testDistributionCalculationNotIdealMessage() throws Exception {
+        String log = print(true, 0.01,2);
+
+        assertTrue(log.contains(CHECK_MESSAGE));
     }
 
     /**
      * @throws Exception If failed.
      */
     public void testDistributionCalculationIdeal() throws Exception {
-        String log = print(true, 0.5);
+        String log = print(true, 0.5, 2);
 
-        assertFalse(log.contains("Local node affinity assignment distribution is not ideal"));
+        assertFalse(log.contains(CHECK_MESSAGE));
     }
 
     /**
      * @throws Exception If failed.
      */
     public void testDistributionCalculationDflt() throws Exception {
-        String log = print(false, 0);
+        String log = print(false, 0, 2);
 
-        assertFalse(log.contains("Local node affinity assignment distribution is not ideal"));
+        assertFalse(log.contains(CHECK_MESSAGE));
     }
 
     /**
+     * @param dflt
+     * @param percent
+     * @param nodeCnt
+     * @return Intercepted log.
      * @throws Exception If failed.
      */
-    public String print(boolean init, double percent) throws Exception {
-        if (init)
+    public String print(boolean dflt, double percent, int nodeCnt) throws Exception {
+        if (dflt)
             System.setProperty(IgniteSystemProperties.IGNITE_PART_DISTRIBUTION_WARN_THRESHOLD, String.valueOf(percent));
 
-        Ignite ignite = startGrids(2);
+        Ignite ignite = startGrids(nodeCnt);
 
         awaitPartitionMapExchange();
 
