@@ -74,6 +74,8 @@ public class MainDCMajorityAwareTopologyValidatorSplitTest extends GridCommonAbs
     protected void beforeTestsStarted() throws Exception {
         super.beforeTestsStarted();
 
+        System.setProperty("maindc.totalnodescount", "3");
+
         startGridsMultiThreaded(GRID_CNT);
     }
 

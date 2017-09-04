@@ -6,7 +6,6 @@ import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.configuration.TopologyValidator;
 import org.apache.ignite.internal.IgniteKernal;
-import org.apache.ignite.internal.processors.cache.CacheGroupContext;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.lang.IgnitePredicate;
 import org.apache.ignite.lifecycle.LifecycleAware;
@@ -24,36 +23,35 @@ class MainDCMajorityAwareTopologyValidator implements TopologyValidator, Lifecyc
     static final String DC_NODE_ATTR = "dc";
 
     /** */
-    static final String ACTIVATOR_NODE_ATTR = "split.resolved";
+    static final String ACTIVATOR_NODE_ATTR = "seg.activator";
 
     /** */
     private static final long serialVersionUID = 0L;
 
     /** */
     @IgniteInstanceResource
-    private Ignite ignite;
+    private transient Ignite ignite;
 
     /** */
     @LoggerResource
-    private IgniteLogger log;
+    private transient IgniteLogger log;
 
     /** */
-    private transient volatile int mainDCNodeCnt;
+    private volatile int mainDCNodeCnt;
 
     /** */
-    private String mainDCAttrValue = "megaCOD";
+    private volatile String mainDCAttrValue = "megaCOD";
 
     /**
      * {@inheritDoc}
      */
     @Override public boolean validate(Collection<ClusterNode> nodes) {
-        int curMainDCNodeCnt = F.view(nodes, (
-            IgnitePredicate<ClusterNode>)node ->
-            !node.isClient() && node.attribute(DC_NODE_ATTR).equals(mainDCAttrValue)
-        ).size();
-
-        if (curMainDCNodeCnt == 0)
-            return false;
+        int curMainDCNodeCnt = F.view(nodes, new IgnitePredicate<ClusterNode>() {
+            @Override
+            public boolean apply(ClusterNode node) {
+                return !node.isClient() && node.attribute(DC_NODE_ATTR).equals(mainDCAttrValue);
+            }
+        }).size();
 
         boolean hasMajority = false;
         boolean partitionLost = false;
@@ -76,30 +74,36 @@ class MainDCMajorityAwareTopologyValidator implements TopologyValidator, Lifecyc
         }
 
         if (!hasMajority || partitionLost) {
-            boolean resolved = F.view(nodes, (
-                IgnitePredicate<ClusterNode>)node -> isMarkerNode(node)
-            ).size() > 0;
+            boolean resolved = F.view(nodes, new IgnitePredicate<ClusterNode>() {
+                @Override
+                public boolean apply(ClusterNode node) {
+                    return isMarkerNode(node);
+                }
+            }).size() > 0;
 
             if (!resolved)
                 log.info("Grid segmentation is detected, switching to inoperative state.");
 
             return resolved;
         }
-        else {
-            if (curMainDCNodeCnt > mainDCNodeCnt)
-                mainDCNodeCnt = curMainDCNodeCnt;
-
+        else
             return true;
-        }
     }
 
     /**
      * {@inheritDoc}
      */
     @Override public void start() throws IgniteException {
-        String mainDCAttrValue = System.getProperty("maindc.value");
+        String mainDCAttrValue = System.getProperty("maindc.attrvalue");
         if (mainDCAttrValue != null && mainDCAttrValue.trim().length() > 0)
             this.mainDCAttrValue = mainDCAttrValue;
+
+        try {
+            mainDCNodeCnt = Integer.parseInt(System.getProperty("maindc.totalnodescount"));
+        }
+        catch (NumberFormatException ex) {
+
+        }
     }
 
     /**
