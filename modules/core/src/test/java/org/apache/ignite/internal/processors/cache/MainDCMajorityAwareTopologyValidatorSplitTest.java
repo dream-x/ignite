@@ -1,9 +1,12 @@
 package org.apache.ignite.internal.processors.cache;
 
 import org.apache.ignite.IgniteCache;
+import org.apache.ignite.cache.PartitionLossPolicy;
+import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;
 import org.apache.ignite.internal.IgniteEx;
+import org.apache.ignite.internal.IgniteKernal;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 
@@ -48,7 +51,7 @@ public class MainDCMajorityAwareTopologyValidatorSplitTest extends GridCommonAbs
                     ccfg.setCacheMode(PARTITIONED);
                     ccfg.setBackups(0);
                     ccfg.setTopologyValidator(new MainDCMajorityAwareTopologyValidator());
-                    //ccfg.setPartitionLossPolicy(PartitionLossPolicy.READ_ONLY_SAFE);
+//                    ccfg.setPartitionLossPolicy(PartitionLossPolicy.READ_ONLY_SAFE);
 
                     ccfgs[cnt] = ccfg;
                 }
@@ -128,8 +131,6 @@ public class MainDCMajorityAwareTopologyValidatorSplitTest extends GridCommonAbs
 
         tryPut(0, 1, 3, 5);
 
-        stopGrid(RESOLVER_GRID_IDX);
-
         clearAll();
 
         startGrid(CONFIGLESS_GRID_IDX);
@@ -139,6 +140,8 @@ public class MainDCMajorityAwareTopologyValidatorSplitTest extends GridCommonAbs
         tryPut(CONFIGLESS_GRID_IDX);
 
         stopGrid(CONFIGLESS_GRID_IDX);
+
+        stopGrid(RESOLVER_GRID_IDX);
 
         awaitPartitionMapExchange();
 
@@ -151,8 +154,6 @@ public class MainDCMajorityAwareTopologyValidatorSplitTest extends GridCommonAbs
         }
 
         startGrid(RESOLVER_GRID_IDX);
-
-        tryPut(0, 1, 3, 5);
 
         stopGrid(RESOLVER_GRID_IDX);
 
@@ -170,15 +171,6 @@ public class MainDCMajorityAwareTopologyValidatorSplitTest extends GridCommonAbs
         stopGrid(5);
 
         awaitPartitionMapExchange();
-/*
-        try {
-            clearAll();
-
-            fail();
-        } catch (Exception e) {
-            // No-op.
-        }
-        */
     }
 
     /** */
@@ -211,6 +203,14 @@ public class MainDCMajorityAwareTopologyValidatorSplitTest extends GridCommonAbs
                     }
                 }
             }
+        }
+    }
+
+    private void printAttr() {
+        System.out.println(grid(0).cluster().nodes().size());
+
+        for (ClusterNode node : grid(0).cluster().nodes()) {
+            System.out.println((String)node.attribute(MainDCMajorityAwareTopologyValidator.DC_NODE_ATTR));
         }
     }
 }

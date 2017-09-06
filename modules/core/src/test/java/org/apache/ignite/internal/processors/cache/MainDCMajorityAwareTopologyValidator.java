@@ -47,8 +47,7 @@ class MainDCMajorityAwareTopologyValidator implements TopologyValidator, Lifecyc
      */
     @Override public boolean validate(Collection<ClusterNode> nodes) {
         int curMainDCNodeCnt = F.view(nodes, new IgnitePredicate<ClusterNode>() {
-            @Override
-            public boolean apply(ClusterNode node) {
+            @Override public boolean apply(ClusterNode node) {
                 return !node.isClient() && node.attribute(DC_NODE_ATTR).equals(mainDCAttrValue);
             }
         }).size();
@@ -75,8 +74,7 @@ class MainDCMajorityAwareTopologyValidator implements TopologyValidator, Lifecyc
 
         if (!hasMajority || partitionLost) {
             boolean resolved = F.view(nodes, new IgnitePredicate<ClusterNode>() {
-                @Override
-                public boolean apply(ClusterNode node) {
+                @Override public boolean apply(ClusterNode node) {
                     return isMarkerNode(node);
                 }
             }).size() > 0;
@@ -95,6 +93,7 @@ class MainDCMajorityAwareTopologyValidator implements TopologyValidator, Lifecyc
      */
     @Override public void start() throws IgniteException {
         String mainDCAttrValue = System.getProperty("maindc.attrvalue");
+
         if (mainDCAttrValue != null && mainDCAttrValue.trim().length() > 0)
             this.mainDCAttrValue = mainDCAttrValue;
 
