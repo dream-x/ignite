@@ -90,6 +90,8 @@ public class QuorumAwareTopologyValidatorSplitTest extends GridCommonAbstractTes
                     ccfgs[cnt] = ccfg;
                 }
 
+                cfg.setUserAttributes(F.asMap("split-brain", "false"));
+
                 cfg.setCacheConfiguration(ccfgs);
             }
         }

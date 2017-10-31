@@ -36,6 +36,7 @@ public class MainDCMajorityAwareTopologyValidatorSplitTest extends GridCommonAbs
 
         cfg.setUserAttributes(F.asMap(MainDCMajorityAwareTopologyValidator.DC_NODE_ATTR, idx % 2 == 0 ? "megaCOD" : "cod"));
 
+
         if (idx != CONFIGLESS_GRID_IDX) {
             if (idx == RESOLVER_GRID_IDX) {
                 cfg.setClientMode(true);

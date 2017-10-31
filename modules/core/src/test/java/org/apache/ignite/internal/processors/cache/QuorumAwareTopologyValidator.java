@@ -7,13 +7,11 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.RetryNTimes;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.ignite.Ignite;
-import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.configuration.TopologyValidator;
 import org.apache.ignite.internal.IgniteKernal;
-import org.apache.ignite.internal.managers.communication.GridMessageListener;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.lang.IgnitePredicate;
 import org.apache.ignite.lifecycle.LifecycleAware;
@@ -23,16 +21,16 @@ import org.apache.zookeeper.CreateMode;
 
 public class QuorumAwareTopologyValidator implements TopologyValidator, LifecycleAware {
     /** */
-    private static final int N = 10;
+    private final int N = 10;
 
     /** */
-    private static final int RETRIES = 1000;
+    private final int RETRIES = 1000;
 
     /** */
-    private static final String MSG = "panic!";
+    private final String SPLIT_BRAIN_ATTR = "split-brain";
 
     /** */
-    private static final String TOPIC = "split-brain";
+    private final String SPLIT_BRAIN_ATTR_VAL = "false";
 
     /** */
     private String zkConnStr;
@@ -55,23 +53,12 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
     private transient IgniteLogger log;
 
     /** */
-    private boolean deactivate = false;
-
-    /** */
     @Override public boolean validate(Collection<ClusterNode> nodes) {
         IgniteKernal kernal = (IgniteKernal)ignite;
 
-        if (!ignite.cluster().localNode().equals(kernal.context().discovery().discoCache().oldestAliveServerNode()))
-            kernal.context().io().addMessageListener(TOPIC, new UserMessageListener());
-
-        try {
-            kernal.context().io().sendUserMessage(nodes, MSG, TOPIC, false, 0, true);
-        }
-        catch (IgniteCheckedException e) {
-            e.printStackTrace();
-        }
-
         UUID currNodeId = ignite.cluster().localNode().id();
+
+        ClusterNode crd = kernal.context().discovery().discoCache().oldestAliveServerNode();
 
         boolean resolved = F.view(nodes, new IgnitePredicate<ClusterNode>() {
             @Override public boolean apply(ClusterNode node) {
@@ -85,10 +72,13 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
             return true;
         }
 
+        if (!SPLIT_BRAIN_ATTR_VAL.equals(crd.attribute(SPLIT_BRAIN_ATTR)))
+            return false;
+
         if (checkLostPartitions(kernal, nodes))
             return false;
 
-        if (ignite.cluster().localNode().equals(kernal.context().discovery().discoCache().oldestAliveServerNode()))
+        if (!ignite.cluster().localNode().equals(crd))
             return true;
 
         if (zkClient == null)
@@ -107,12 +97,14 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
             String crdPath = path + "/" + currNodeId;
             byte[] crdData = new String(topologyVersion + ";" + nodes.size() + ";" +
-                System.currentTimeMillis()).getBytes();
+                System.currentTimeMillis() + ";false").getBytes();
 
             if (zkClient.checkExists().forPath(crdPath) == null)
                 zkClient.create().withMode(CreateMode.EPHEMERAL).forPath(crdPath, crdData);
             else
                 zkClient.setData().forPath(crdPath, crdData);
+
+            System.out.println("666666 " + currNodeId + " " + crd.id());
 
             checkQuorum = checkTopologyVersion(topologyVersion, nodes, zkClient.getChildren().forPath(path),
                 currNodeId.toString(), nodes.size());
@@ -157,13 +149,6 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
             return true;
         }
 
-        try {
-            kernal.context().io().sendUserMessage(snapshot, MSG, TOPIC, false, 0, true);
-        }
-        catch (IgniteCheckedException e) {
-            e.printStackTrace();
-        }
-
         return false;
     }
 
@@ -175,10 +160,10 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
             String[] params = new String(zkClient.getData().forPath(crdPath), "gbk").split(";");
 
-            long topVer = Long.getLong(params[0]);
-            int size = Integer.getInteger(params[1]);
-            long time = Long.getLong(params[2]);
-            boolean active = Boolean.getBoolean(params[3]);
+            long topVer = Long.parseLong(params[0]);
+            int size = Integer.parseInt(params[1]);
+            long time = Long.parseLong(params[2]);
+            boolean active = Boolean.parseBoolean(params[3]);
 
             if (histories.size() == 1) {
                 setActive(true, crdPath, curTopVer, curSize);
@@ -202,12 +187,7 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
             setActive(false, crdPath, curTopVer, curSize);
         }
 
-        try {
-            ((IgniteKernal)ignite).context().io().sendUserMessage(snapshot, MSG, TOPIC, false, 0, true);
-        }
-        catch (IgniteCheckedException e) {
-            e.printStackTrace();
-        }
+        ((IgniteKernal)ignite).context().config().setUserAttributes(F.asMap(SPLIT_BRAIN_ATTR, "true"));
 
         return false;
     }
@@ -232,16 +212,4 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
             new String(curTopVer + ";" + curSize + ";" +
                 System.currentTimeMillis() + ";" + active).getBytes());
     }
-
-    private class UserMessageListener implements GridMessageListener{
-        @Override public void onMessage(UUID nodeId, Object msg, byte plc) {
-            assert nodeId != null;
-            assert msg != null;
-
-            if (String.valueOf(msg).equals(MSG)) {
-                System.out.println("9999" + msg);
-                deactivate = true;
-            }
-        }
-    };
 }
