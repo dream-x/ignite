@@ -1,6 +1,5 @@
 package org.apache.ignite.internal.processors.cache;
 
-import java.util.List;
 import org.apache.curator.test.TestingCluster;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.ignite.IgniteCache;
@@ -13,7 +12,7 @@ import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 
 import static org.apache.ignite.cache.CacheMode.PARTITIONED;
 
-public class QuorumAwareTopologyValidatorSplitTest extends GridCommonAbstractTest {
+public class SimpleAwareTologyValidatorTest extends GridCommonAbstractTest {
     /** */
     private static final String ZOOKEEPER_CONNECTIONS_STR = "0.0.0.0:2181";
 
@@ -42,7 +41,7 @@ public class QuorumAwareTopologyValidatorSplitTest extends GridCommonAbstractTes
 //        zkCluster = new TestingCluster(ZK_CLUSTER_SIZE);
 //        zkCluster.start();
 
-         System.setProperty("zookeeper.connectionString", ZOOKEEPER_CONNECTIONS_STR);
+        System.setProperty("zookeeper.connectionString", ZOOKEEPER_CONNECTIONS_STR);
 
         startGridsMultiThreaded(GRID_CNT);
     }
@@ -84,7 +83,7 @@ public class QuorumAwareTopologyValidatorSplitTest extends GridCommonAbstractTes
                     ccfg.setName(testCacheName(cnt));
                     ccfg.setCacheMode(PARTITIONED);
                     ccfg.setBackups(0);
-                    ccfg.setTopologyValidator(new QuorumAwareTopologyValidator());
+                    ccfg.setTopologyValidator(new SimpleAwareTopologyValidator());
 //                    ccfg.setPartitionLossPolicy(PartitionLossPolicy.READ_ONLY_SAFE);
 
                     ccfgs[cnt] = ccfg;
@@ -117,74 +116,73 @@ public class QuorumAwareTopologyValidatorSplitTest extends GridCommonAbstractTes
 
         clearAll();
 
-        stopGrid(1);
-        stopGrid(3);
+        stopGrid(0);
 
         awaitPartitionMapExchange();
 
-        tryPut(0, 2, 4, 5);
+        tryPut(2, 4, 5);
 
         clearAll();
-
-        startGrid(1);
-        startGrid(3);
-        stopGrid(2);
-        stopGrid(4);
-
-        awaitPartitionMapExchange();
-
-        try {
-            tryPut(0, 1, 3, 5);
-
-            fail();
-        } catch (Exception e) {
-            // No-op.
-        }
-
-        startGrid(RESOLVER_GRID_IDX);
-
-        tryPut(0, 1, 3, 5);
-
-        clearAll();
-
-        startGrid(CONFIGLESS_GRID_IDX);
-
-        awaitPartitionMapExchange();
-
-        tryPut(CONFIGLESS_GRID_IDX);
-
-        stopGrid(CONFIGLESS_GRID_IDX);
-
-        stopGrid(RESOLVER_GRID_IDX);
-
-        awaitPartitionMapExchange();
-
-        try {
-            tryPut(0, 1, 3, 5);
-
-            fail();
-        } catch (Exception e) {
-            // No-op.
-        }
-
-        startGrid(RESOLVER_GRID_IDX);
-
-        stopGrid(RESOLVER_GRID_IDX);
-
-        clearAll();
-
-        startGrid(2);
-        startGrid(4);
-
-        awaitPartitionMapExchange();
-
-        tryPut(0, 1, 2, 3, 4, 5);
-
-        stopGrid(1);
-        stopGrid(3);
-        stopGrid(5);
-
-        awaitPartitionMapExchange();
+//
+//        startGrid(1);
+//        startGrid(3);
+//        stopGrid(2);
+//        stopGrid(4);
+//
+//        awaitPartitionMapExchange();
+//
+//        try {
+//            tryPut(0, 1, 3, 5);
+//
+//            fail();
+//        } catch (Exception e) {
+//            // No-op.
+//        }
+//
+//        startGrid(RESOLVER_GRID_IDX);
+//
+//        tryPut(0, 1, 3, 5);
+//
+//        clearAll();
+//
+//        startGrid(CONFIGLESS_GRID_IDX);
+//
+//        awaitPartitionMapExchange();
+//
+//        tryPut(CONFIGLESS_GRID_IDX);
+//
+//        stopGrid(CONFIGLESS_GRID_IDX);
+//
+//        stopGrid(RESOLVER_GRID_IDX);
+//
+//        awaitPartitionMapExchange();
+//
+//        try {
+//            tryPut(0, 1, 3, 5);
+//
+//            fail();
+//        } catch (Exception e) {
+//            // No-op.
+//        }
+//
+//        startGrid(RESOLVER_GRID_IDX);
+//
+//        stopGrid(RESOLVER_GRID_IDX);
+//
+//        clearAll();
+//
+//        startGrid(2);
+//        startGrid(4);
+//
+//        awaitPartitionMapExchange();
+//
+//        tryPut(0, 1, 2, 3, 4, 5);
+//
+//        stopGrid(1);
+//        stopGrid(3);
+//        stopGrid(5);
+//
+//        awaitPartitionMapExchange();
     }
 
     /** */
