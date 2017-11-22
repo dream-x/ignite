@@ -15,10 +15,10 @@ import static org.apache.ignite.cache.CacheMode.PARTITIONED;
 
 public class QuorumAwareTopologyValidatorSplitTest extends GridCommonAbstractTest {
     /** */
-    private static final String ZOOKEEPER_CONNECTIONS_STR = "0.0.0.0:2181";
+    private static final String ZOOKEEPER_CONNECTIONS_STR = "0.0.0.0:2181,0.0.0.0:2181,0.0.0.0:2181";
 
     /** */
-    private static final int GRID_CNT = 6;
+    private static final int GRID_CNT = 10;
 
     /** */
     private static final int CACHES_CNT = 1;
@@ -84,7 +84,8 @@ public class QuorumAwareTopologyValidatorSplitTest extends GridCommonAbstractTes
                     ccfg.setName(testCacheName(cnt));
                     ccfg.setCacheMode(PARTITIONED);
                     ccfg.setBackups(0);
-                    ccfg.setTopologyValidator(new QuorumAwareTopologyValidator());
+//                    ccfg.setTopologyValidator(new QuorumAwareTopologyValidator());
+                    ccfg.setTopologyValidator(new SimpleAwareTopologyValidator());
 //                    ccfg.setPartitionLossPolicy(PartitionLossPolicy.READ_ONLY_SAFE);
 
                     ccfgs[cnt] = ccfg;
@@ -117,8 +118,12 @@ public class QuorumAwareTopologyValidatorSplitTest extends GridCommonAbstractTes
 
         clearAll();
 
-        stopGrid(1);
-        stopGrid(3);
+        stopGrid(1, true);
+        stopGrid(0, true);
+        stopGrid(3, true);
+        stopGrid(7, true);
+        stopGrid(2, true);
+        stopGrid(4, true);
 
         awaitPartitionMapExchange();
 

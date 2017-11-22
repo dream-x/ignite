@@ -15,19 +15,18 @@ public class SimpleAwareTopologyValidator implements TopologyValidator, Lifecycl
     @IgniteInstanceResource
     private transient Ignite ignite;
 
-    private static final String SPLIT_BRAIN_ATTR = "split-brain";
-
     @Override public boolean validate(Collection<ClusterNode> nodes) {
         IgniteKernal kernal = (IgniteKernal)ignite;
 
         ClusterNode crd = kernal.context().discovery().discoCache().oldestAliveServerNode();
 
-        if (ignite.cluster().localNode().equals(crd)) {
-            System.out.println("change coordinator");
-            ((IgniteKernal)ignite).context().config().setUserAttributes(F.asMap(SPLIT_BRAIN_ATTR, System.currentTimeMillis()));
-        }
+        System.out.println("++++++++++ " + ignite.cluster().localNode().id()+ " coord " + crd.id() + " time " + System.currentTimeMillis());
 
-        System.out.println("Coordinate attr: " + crd.attribute(SPLIT_BRAIN_ATTR));
+        long topologyVersion = kernal.cluster().topologyVersion();
+
+        long topologyVersion2 = kernal.context().discovery().topologyVersion();
+
+        System.out.println("==== 1: " + topologyVersion + "  " + "2: " + topologyVersion2 + " n1: " + nodes.size() + " n2: " + kernal.cluster().nodes().size());
 
         return true;
     }

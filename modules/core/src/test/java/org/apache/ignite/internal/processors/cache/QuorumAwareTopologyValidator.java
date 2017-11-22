@@ -1,13 +1,16 @@
 package org.apache.ignite.internal.processors.cache;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import java.util.logging.Logger;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.RetryNTimes;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.ignite.Ignite;
+import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.cluster.ClusterNode;
@@ -19,7 +22,7 @@ import org.apache.ignite.lifecycle.LifecycleAware;
 import org.apache.ignite.resources.IgniteInstanceResource;
 import org.apache.ignite.resources.LoggerResource;
 import org.apache.zookeeper.CreateMode;
-import org.slf4j.LoggerFactory;
+import org.jetbrains.annotations.NotNull;
 
 /**
  *
@@ -27,7 +30,7 @@ import org.slf4j.LoggerFactory;
 @SuppressWarnings("unused")
 public class QuorumAwareTopologyValidator implements TopologyValidator, LifecycleAware {
     /** */
-//    private static final Logger LOGGER = LoggerFactory.getLogger(DPLTopologyValidator.class);
+//    private static final Logger log = LoggerFactory.getLogger(DPLTopologyValidator.class);
 
     /** */
     private static final int N = 10;
@@ -36,16 +39,16 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
     private static final int RETRIES = 1000;
 
     /** */
-    private static final String SPLIT_BRAIN_ATTR = "split-brain";
-
-    /** */
-    private static final String SPLIT_BRAIN_ATTR_VAL = "false";
-
-    /** */
     private static final String ACTIVATOR_NODE_ATTR = "seg.activator";
 
     /** */
-    private static final String PATH = "/TopologiesHistory";
+    private static final String PATH = "/Topologies";
+
+    /** */
+    private static final String COUNT_SERVERS = "/CountServers";
+
+    /** */
+    private static final String LOST_SERVERS = "/CountLostServers";
 
     /** */
     private transient volatile String zkConnStr;
@@ -59,13 +62,11 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
     /** */
     @LoggerResource
-    private transient IgniteLogger LOGGER;
+    private transient IgniteLogger log;
 
     /** */
     @Override public boolean validate(Collection<ClusterNode> nodes) {
         IgniteKernal kernal = (IgniteKernal)ignite;
-
-        UUID currNodeId = ignite.cluster().localNode().id();
 
         ClusterNode crd = kernal.context().discovery().discoCache().oldestAliveServerNode();
 
@@ -75,55 +76,73 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
             }
         }).size() > 0;
 
-        if (resolved) {
-            ((IgniteKernal)ignite).context().config().setUserAttributes(F.asMap(SPLIT_BRAIN_ATTR, SPLIT_BRAIN_ATTR_VAL));
+        System.out.println("++++++++++ " + ignite.cluster().localNode().id()+ " coord " + crd.id() + " time " + System.currentTimeMillis());
 
-            LOGGER.info("Node activator includes in the topology.");
+        if (resolved) {
+            log.info("Node activator includes in the topology.");
 
             return true;
         }
 
-        if (!SPLIT_BRAIN_ATTR_VAL.equals(crd.attribute(SPLIT_BRAIN_ATTR)))
-            return false;
-
         if (checkLostPartitions(kernal, nodes))
             return false;
-
-        if (!ignite.cluster().localNode().equals(crd))
-            return true;
 
         if (zkClient == null)
             connect();
 
         long topologyVersion = kernal.cluster().topologyVersion();
 
+        long topologyVersion2 = kernal.context().discovery().topologyVersion();
+
+        System.out.println("==== 1: " + topologyVersion + "  " + "2: " + topologyVersion2 + " n: " + nodes.size());
+
         boolean checkQuorum = false;
 
+        String pathCrd = PATH + "/" + crd.id();
+
         try {
-            if (zkClient.checkExists().forPath(PATH) == null)
-                zkClient.create()
-                    .creatingParentsIfNeeded()
-                    .withMode(CreateMode.PERSISTENT)
-                    .forPath(PATH);
+            if (ignite.cluster().localNode().equals(crd)) {
+                if (zkClient.checkExists().forPath(PATH) == null) {
+                    zkClient.create()
+                        .creatingParentsIfNeeded()
+                        .withMode(CreateMode.PERSISTENT)
+                        .forPath(PATH);
+                }
 
-            String crdPath = PATH + "/" + currNodeId;
-            byte[] crdData = new String(topologyVersion + ";" + nodes.size() + ";" +
-                System.currentTimeMillis() + ";false").getBytes();
+                byte[] crdData = (topologyVersion + ";" + nodes.size() + ";" +
+                    System.currentTimeMillis() + ";false").getBytes();
 
-            if (zkClient.checkExists().forPath(crdPath) == null)
-                zkClient.create().withMode(CreateMode.EPHEMERAL).forPath(crdPath, crdData);
-            else
-                zkClient.setData().forPath(crdPath, crdData);
+                createOrUpdate(zkClient, CreateMode.PERSISTENT, pathCrd, crdData);
 
-            checkQuorum = checkTopologyVersion(topologyVersion, nodes, zkClient.getChildren().forPath(PATH),
-                currNodeId.toString(), nodes.size());
+                for (ClusterNode node : nodes) {
+                    String pathNode = pathCrd + "/" + node.id();
+
+                    createOrUpdate(zkClient, CreateMode.PERSISTENT, pathNode,
+                        String.valueOf(topologyVersion).getBytes());
+                }
+            } else {
+                if (zkClient.checkExists().forPath(pathCrd) == null) {
+                    log.error("Not fount entry in ZooKeeper.");
+
+                    return false;
+                }
+
+                System.out.println("For node: " + ignite.cluster().localNode().id() + " coord: " + crd);
+            }
+
+//            checkQuorum = checkTopologyVersion(topologyVersion, zkClient.getChildren().forPath(PATH),
+//                crd.id(), nodes.size());
+
+            checkQuorum = true;
         }
         catch (Exception e) {
-            LOGGER.error("Zookeeper error.", e);
+            log.error("Zookeeper error.", e);
+
+            checkQuorum = false;
         }
 
         if (!checkQuorum)
-            LOGGER.info("Grid segmentation is detected, switching to inoperative state.");
+            log.info("Grid segmentation is detected, switching to inoperative state.");
 
         return checkQuorum;
     }
@@ -153,7 +172,7 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
         }
 
         if (partitionLost) {
-            LOGGER.info("Grid partition lost is detected, switching to inoperative state.");
+            log.info("Grid partition lost is detected, switching to inoperative state.");
 
             return true;
         }
@@ -162,48 +181,50 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
     }
 
     /** */
-    private boolean checkTopologyVersion(long curTopVer, Collection<ClusterNode> snapshot,
-        Collection<String> histories, String nodeId, int curSize) throws Exception {
-        for (String child : histories) {
-            String crdPath = PATH + "/" + child;
+    private boolean checkTopologyVersion(long curTopVer, Collection<String> crds,
+        UUID crdId, int curSize) throws Exception {
 
-            String[] params = new String(zkClient.getData().forPath(crdPath), "gbk").split(";");
+        Map<String, Map<String, Integer>> topologies = new HashMap<>();
 
-            long topVer = Long.parseLong(params[0]);
-            int size = Integer.parseInt(params[1]);
-            long time = Long.parseLong(params[2]);
+        int cntSrv = Integer.parseInt(new String(zkClient.getData().forPath(COUNT_SERVERS), "gbk"));
+        int cntLostSrv = Integer.parseInt(new String(zkClient.getData().forPath(LOST_SERVERS), "gbk"));
+        int delta = cntSrv - cntLostSrv;
+
+        // если ты координатор то смотришь текущую топологию и валидируешь по списску
+        // мин количество серверов
+        // проверяет мощность других координаторов (кластеров)
+        // обновляет статус активный или нет и возвращает такой же ответ для TV
+        if (ignite.cluster().localNode().id().equals(crdId)) {
+            for (String crd : crds) {
+                String path = PATH + "/" + crd;
+
+//                String[] params = new String(zkClient.getData().forPath(path), "gbk").split(";");
+
+//                long topVer = Long.parseLong(params[0]);
+//                int size = Integer.parseInt(params[1]);
+//                long time = Long.parseLong(params[2]);
+//                boolean active = Boolean.parseBoolean(params[3]);
+
+                Collection<String> nodesByCrd = zkClient.getChildren().forPath(path);
+
+                topologies.put(crd, new HashMap<>());
+
+                for (String node : nodesByCrd) {
+                    topologies.get(crd).put(node, Integer.parseInt(new String(
+                        zkClient.getData().forPath(path + "/" + node), "gbk")));
+                }
+
+
+            }
+        } else {
+            String path = PATH + "/" + crdId;
+
+            String[] params = new String(zkClient.getData().forPath(path), "gbk").split(";");
+
             boolean active = Boolean.parseBoolean(params[3]);
 
-            if (histories.size() == 1) {
-                setActive(true, crdPath, curTopVer, curSize);
-
-                return true;
-            }
-
-            if (child.equals(nodeId)) {
-                if (curSize < size && curTopVer > topVer && active) {
-                    setActive(true, crdPath, curTopVer, curSize);
-
-                    return true;
-                }
-            } else {
-                if (active) {
-                    ((IgniteKernal)ignite).context().config().setUserAttributes(F.asMap(SPLIT_BRAIN_ATTR, "true"));
-
-                    return false;
-                }
-
-                if (curSize > size && !active) {
-                    setActive(true, crdPath, curTopVer, curSize);
-
-                    return true;
-                }
-            }
-
-            setActive(false, crdPath, curTopVer, curSize);
+            return active;
         }
-
-        ((IgniteKernal)ignite).context().config().setUserAttributes(F.asMap(SPLIT_BRAIN_ATTR, "true"));
 
         return false;
     }
@@ -224,8 +245,44 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
     /** */
     private void setActive(boolean active, String path, long curTopVer, int curSize) throws Exception {
-        zkClient.setData().forPath(path,
-            new String(curTopVer + ";" + curSize + ";" +
-                System.currentTimeMillis() + ";" + active).getBytes());
+        zkClient.setData().forPath(path, (curTopVer + ";" + curSize + ";" +
+            System.currentTimeMillis() + ";" + active).getBytes());
+    }
+
+    /** */
+    private void createOrUpdate(CuratorFramework zkClient, CreateMode mode, String path, byte[] data) throws Exception {
+        if (zkClient.checkExists().forPath(path) == null)
+            zkClient.create().withMode(mode).forPath(path, data);
+        else
+            zkClient.setData().forPath(path, data);
+    }
+
+    private class Cluster implements Comparable<Cluster> {
+        private String id;
+        private int size;
+        private long topVer;
+        private boolean active;
+        private long time;
+
+        public Cluster(String id, int size, long topVer, boolean active, long time) {
+            this.id = id;
+            this.size = size;
+            this.topVer = topVer;
+            this.active = active;
+            this.time = time;
+        }
+
+        public int getSize() {
+            return size;
+        }
+
+        public long getTime() {
+            return time;
+        }
+
+        @Override public int compareTo(@NotNull Cluster cluster) {
+            // добавить более сложную сортировку
+            return time > cluster.getTime() ? 1 : time < cluster.getTime() ? -1 : 0;
+        }
     }
 }

@@ -58,6 +58,7 @@ public abstract class GridDhtTopologyFutureAdapter extends GridFutureAdapter<Aff
         if (!grp.systemCache()) {
             TopologyValidator validator = grp.topologyValidator();
 
+            System.out.println("===+++ " + grp.shared().exchange().readyAffinityVersion().topologyVersion());
             if (validator != null)
                 valid = validator.validate(topNodes);
         }
