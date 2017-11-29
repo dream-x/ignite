@@ -62,7 +62,7 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
     private static final int RETRIES = 1000;
 
     /** */
-    private static final int LOCK_TIMEOUT = 30_000;
+    private static final int LOCK_TIMEOUT = 60_000;
 
     /** */
     private static final String ACTIVATOR_NODE_ATTR = "split.resolved";
@@ -229,8 +229,6 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
                     return false;
                 }
-
-                System.out.println("For node: " + ignite.cluster().localNode().id() + " coord: " + crd);
             }
 
             checkQuorum = checkTopologyVersion(topologyVersion, zkClient.getChildren().forPath(PATH),
@@ -288,6 +286,8 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
         // обновляет статус активный или нет и возвращает такой же ответ для TV
         if (!lock.acquire(LOCK_TIMEOUT, TimeUnit.MILLISECONDS)) {
             log.error(crdId + " could not acquire the lock.");
+
+            return false;
         }
 
         try {
@@ -298,20 +298,17 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
                     String path = PATH + "/" + crd;
 
-//                String[] params = new String(zkClient.getData().forPath(path), "gbk").split(";");
+                    String[] params = new String(zkClient.getData().forPath(path), "gbk").split(";");
 
-//                long topVer = Long.parseLong(params[0]);
-//                int size = Integer.parseInt(params[1]);
-//                long time = Long.parseLong(params[2]);
-//                boolean active = Boolean.parseBoolean(params[3]);
+                    long topVer = Long.parseLong(params[0]);
+                    int size = Integer.parseInt(params[1]);
+                    long time = Long.parseLong(params[2]);
+                    boolean active = Boolean.parseBoolean(params[3]);
 
-                    Collection<String> nodesByCrd = zkClient.getChildren().forPath(path);
+                    if (size > curSize && size > delta) {
+                        setActive(false, PATH + "/" + crdId, curTopVer, curSize);
 
-                    topologies.put(crd, new HashMap<>());
-
-                    for (String node : nodesByCrd) {
-                        topologies.get(crd).put(node, Integer.parseInt(new String(
-                            zkClient.getData().forPath(path + "/" + node), "gbk")));
+                        return false;
                     }
                 }
             } else {
@@ -326,6 +323,8 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
         } finally {
             lock.release();
         }
+
+        setActive(false, PATH + "/" + crdId, curTopVer, curSize);
 
         return false;
     }
