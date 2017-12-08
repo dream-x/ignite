@@ -25,7 +25,7 @@ import static org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi.DFLT_PORT;
 
 public class QuorumAwareTopologyValidatorSplitTest2 extends IgniteCacheTopologySplitAbstractTest {
     /** */
-    private static final String ZOOKEEPER_CONNECTIONS_STR = "0.0.0.0:2181,0.0.0.0:2181,0.0.0.0:2181";
+    private static final String ZOOKEEPER_CONNECTIONS_STR = "127.0.0.1:2181";
 
     /** */
     private static final String DC_NODE_ATTR = "dc";
@@ -34,10 +34,10 @@ public class QuorumAwareTopologyValidatorSplitTest2 extends IgniteCacheTopologyS
     private static final String ACTIVATOR_NODE_ATTR = "split.resolved";
 
     /** */
-    private static final int GRID_CNT = 32;
+    private static final int GRID_CNT = 8;
 
     /** */
-    private static final int CACHES_CNT = 50;
+    private static final int CACHES_CNT = 12;
 
     /** */
     private static final int RESOLVER_GRID_IDX = GRID_CNT;
@@ -242,7 +242,7 @@ public class QuorumAwareTopologyValidatorSplitTest2 extends IgniteCacheTopologyS
         splitAndWait();
 
         try {
-            tryPut(seg0, seg1);
+            tryPut(seg1);
 
             fail();
         }
@@ -250,19 +250,19 @@ public class QuorumAwareTopologyValidatorSplitTest2 extends IgniteCacheTopologyS
             // No-op.
         }
 
-        // Repair split by adding activator node in topology.
-        resolveSplit();
-
         tryPut(seg0);
 
         clearAll();
 
         try {
-            tryPut(seg1);
+            // Repair split by adding activator node in topology.
+            resolveSplit();
 
-            fail();
+            tryPut(seg1);
         }
         catch (Exception e) {
+            System.out.println(e);
+            fail();
             // No-op.
         }
 
@@ -412,7 +412,7 @@ public class QuorumAwareTopologyValidatorSplitTest2 extends IgniteCacheTopologyS
                 }
             }
 
-            assertTrue("Failed to find affinity key [gridIdx=" + idx +", cache=" + cacheName + ']',
+            assertTrue("Failed to find affinity key [gridIdx=" + idx + ", cache=" + cacheName + ']',
                 key != -1);
 
             IgniteCache<Object, Object> cache = g.cache(cacheName);

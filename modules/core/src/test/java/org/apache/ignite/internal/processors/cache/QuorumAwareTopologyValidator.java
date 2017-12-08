@@ -18,31 +18,30 @@
 package org.apache.ignite.internal.processors.cache;
 
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.imps.CuratorFrameworkState;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
-import org.apache.curator.retry.RetryNTimes;
+import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.ignite.Ignite;
-import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.configuration.TopologyValidator;
 import org.apache.ignite.internal.IgniteKernal;
+import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.F;
+import org.apache.ignite.internal.util.typedef.internal.A;
 import org.apache.ignite.lang.IgnitePredicate;
 import org.apache.ignite.lifecycle.LifecycleAware;
 import org.apache.ignite.resources.CacheNameResource;
 import org.apache.ignite.resources.IgniteInstanceResource;
 import org.apache.ignite.resources.LoggerResource;
 import org.apache.zookeeper.CreateMode;
-import org.jetbrains.annotations.NotNull;
 
 /**
  *
@@ -50,6 +49,8 @@ import org.jetbrains.annotations.NotNull;
 public class QuorumAwareTopologyValidator implements TopologyValidator, LifecycleAware {
 //    /** */
 //    private static final Logger log = LoggerFactory.getLogger(DPLTopologyValidator.class);
+
+    private static final long serialVersionUID = 0L;
 
     /** */
     @LoggerResource
@@ -65,7 +66,10 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
     private static final int LOCK_TIMEOUT = 60_000;
 
     /** */
-    private static final String ACTIVATOR_NODE_ATTR = "split.resolved";
+    private static final String ACTIVATOR_NODE_ATTR = "seg.activator";
+
+    /** */
+    private static final String ZK_CONNECTION_STRING_ATTR = "zookeeper.connectionString";
 
     /** */
     private static final String PATH = "/Topologies";
@@ -77,10 +81,14 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
     private static final String LOST_SERVERS = "/LostServers";
 
     /** */
-    private transient volatile String zkConnStr;
+    private transient String zkConnStr;
 
     /** */
-    private transient volatile CuratorFramework zkClient = null;
+    private transient static CuratorFramework zkClient;
+
+    /** */
+    @GridToStringExclude
+    private final AtomicBoolean initGuard = new AtomicBoolean();
 
     /** State. */
     private transient State state;
@@ -93,20 +101,32 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
     @CacheNameResource
     private transient String cacheName;
 
+    QuorumAwareTopologyValidator() {
+        init();
+    }
+
+    private void init() {
+        if (!initGuard.compareAndSet(false, true))
+            return;
+
+        String sysPropZkConnString = System.getProperty(ZK_CONNECTION_STRING_ATTR);
+
+        if (zkClient == null) {
+            zkClient = CuratorFrameworkFactory.builder()
+                .connectString(sysPropZkConnString)
+                .retryPolicy(new ExponentialBackoffRetry(N, RETRIES))
+                .build();
+        }
+
+        if (zkClient.getState() == CuratorFrameworkState.LATENT)
+            zkClient.start();
+
+        A.ensure(zkClient.getState() == CuratorFrameworkState.STARTED, "CuratorFramework can't be started.");
+    }
+
     /** */
     @Override public boolean validate(Collection<ClusterNode> nodes) {
         initIfNeeded(nodes);
-
-//        for (ClusterNode node : F.view(nodes, new IgnitePredicate<ClusterNode>() {
-//            @Override public boolean apply(ClusterNode node) {
-//                return !node.isClient() && node.attribute(DC_NODE_ATTR) == null;
-//            }
-//        })) {
-//            log.error("Not valid server nodes are detected in topology: [cacheName=" + cacheName + ", node=" +
-//                node + ']');
-//
-//            return false;
-//        }
 
         boolean segmented = segmented(nodes);
 
@@ -157,12 +177,13 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
     /** */
     @Override public void start() throws IgniteException {
-        zkConnStr = System.getProperty("zookeeper.connectionString");
+        // No-op
     }
 
     /** */
     @Override public void stop() throws IgniteException {
-        CloseableUtils.closeQuietly(zkClient);
+        if (zkClient != null)
+            CloseableUtils.closeQuietly(zkClient);
     }
 
     /**
@@ -181,25 +202,22 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
         boolean resolved = F.view(nodes, new IgnitePredicate<ClusterNode>() {
             @Override public boolean apply(ClusterNode node) {
-                return isMarkerNode(node);
+                return activator(node);
             }
         }).size() > 0;
 
         if (resolved) {
-            log.info("Node activator includes in the topology.");
+            log.info("Node activator includes in the topology." + "===== " + ignite.cluster().localNode().id() + " " + nodes.size());
 
-            return true;
+            return false;
         }
 
         if (checkLostPartitions(kernal, nodes))
-            return false;
-
-        if (zkClient == null)
-            connect();
+            return true;
 
         long topologyVersion = kernal.cluster().topologyVersion();
 
-        boolean checkQuorum = false;
+        boolean isSplitBrain = false;
 
         String pathCrd = PATH + "/" + crd.id();
 
@@ -212,8 +230,20 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
                         .forPath(PATH);
                 }
 
-                byte[] crdData = (topologyVersion + ";" + nodes.size() + ";" +
-                    System.currentTimeMillis() + ";false").getBytes();
+                byte[] crdData;
+
+                if (zkClient.checkExists().forPath(pathCrd) != null) {
+                    String[] params = new String(zkClient.getData().forPath(pathCrd), "gbk").split(";");
+
+                    boolean active = Boolean.parseBoolean(params[3]);
+
+                    crdData = (topologyVersion + ";" + nodes.size() + ";" +
+                        System.currentTimeMillis() + ";" + active).getBytes();
+                }
+                else {
+                    crdData = (topologyVersion + ";" + nodes.size() + ";" +
+                        System.currentTimeMillis() + ";true").getBytes();
+                }
 
                 createOrUpdate(zkClient, CreateMode.PERSISTENT, pathCrd, crdData);
 
@@ -223,27 +253,24 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
                     createOrUpdate(zkClient, CreateMode.PERSISTENT, pathNode,
                         String.valueOf(topologyVersion).getBytes());
                 }
-            } else {
-                if (zkClient.checkExists().forPath(pathCrd) == null) {
-                    log.error("Not fount entry in ZooKeeper.");
-
-                    return false;
-                }
             }
 
-            checkQuorum = checkTopologyVersion(topologyVersion, zkClient.getChildren().forPath(PATH),
+            isSplitBrain = !checkTopologyVersion(topologyVersion, zkClient.getChildren().forPath(PATH),
                 crd.id(), nodes.size());
         }
+        catch (IllegalStateException e) {
+//            log.error("fix it => Crd=" + crd.id(), e);
+        }
         catch (Exception e) {
-            log.error("Zookeeper error.", e);
+            log.error("Zookeeper error. Crd=" + crd.id(), e);
 
-            checkQuorum = false;
+            isSplitBrain = true;
         }
 
-        if (!checkQuorum)
+        if (isSplitBrain)
             log.info("Grid segmentation is detected, switching to inoperative state.");
 
-        return checkQuorum;
+        return isSplitBrain;
     }
 
     /** */
@@ -274,24 +301,21 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
         UUID crdId, int curSize) throws Exception {
         InterProcessMutex lock = new InterProcessMutex(zkClient, PATH);
 
-        Map<String, Map<String, Integer>> topologies = new HashMap<>();
-
         int srvs = Integer.parseInt(new String(zkClient.getData().forPath(SERVERS), "gbk"));
         int lostSrvs = Integer.parseInt(new String(zkClient.getData().forPath(LOST_SERVERS), "gbk"));
         int delta = srvs - lostSrvs;
 
-        // если ты координатор то смотришь текущую топологию и валидируешь по списску
-        // мин количество серверов
-        // проверяет мощность других координаторов (кластеров) и сравниет со своей
-        // обновляет статус активный или нет и возвращает такой же ответ для TV
-        if (!lock.acquire(LOCK_TIMEOUT, TimeUnit.MILLISECONDS)) {
-            log.error(crdId + " could not acquire the lock.");
+        if (ignite.cluster().localNode().id().equals(crdId)) {
+            if (!lock.acquire(LOCK_TIMEOUT, TimeUnit.MILLISECONDS)) {
+                log.error(crdId + " could not acquire the lock.");
 
-            return false;
-        }
+                return false;
+            }
 
-        try {
-            if (ignite.cluster().localNode().id().equals(crdId)) {
+            try {
+                if (crds.size() == 1)
+                    return true;
+
                 for (String crd : crds) {
                     if (crdId.toString().equals(crd))
                         continue;
@@ -305,42 +329,34 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
                     long time = Long.parseLong(params[2]);
                     boolean active = Boolean.parseBoolean(params[3]);
 
-                    if (size > curSize && size > delta) {
+                    if (size > curSize || size < delta) {
                         setActive(false, PATH + "/" + crdId, curTopVer, curSize);
 
                         return false;
                     }
                 }
-            } else {
-                String path = PATH + "/" + crdId;
-
-                String[] params = new String(zkClient.getData().forPath(path), "gbk").split(";");
-
-                return Boolean.parseBoolean(params[3]);
             }
-        } catch (Exception e) {
-            log.error("Error in split-brain definition.", e);
-        } finally {
-            lock.release();
+            catch (Exception e) {
+                log.error("Error in split-brain definition.", e);
+            }
+            finally {
+                lock.release();
+            }
+        }
+        else {
+            String path = PATH + "/" + crdId;
+
+            String[] params = new String(zkClient.getData().forPath(path), "gbk").split(";");
+
+            long topVer = Long.parseLong(params[0]);
+            boolean active = Boolean.parseBoolean(params[3]);
+
+            return active;
         }
 
-        setActive(false, PATH + "/" + crdId, curTopVer, curSize);
+        setActive(true, PATH + "/" + crdId, curTopVer, curSize);
 
-        return false;
-    }
-
-    /** */
-    private void connect() {
-        zkClient = CuratorFrameworkFactory.newClient(zkConnStr, new RetryNTimes(N, RETRIES));
-        zkClient.start();
-    }
-
-    /**
-     * @param node Node.
-     * @return {@code True} if this is marker node.
-     */
-    private boolean isMarkerNode(ClusterNode node) {
-        return node.isClient() && node.attribute(ACTIVATOR_NODE_ATTR) != null;
+        return true;
     }
 
     /** */
@@ -419,41 +435,5 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
         BEFORE_REPARED,
         /** Topology is repaired (valid) */
         REPAIRED;
-    }
-
-    private class Cluster {
-        private String id;
-        private int size;
-        private long topVer;
-        private boolean active;
-        private long time;
-
-        public Cluster(String id, int size, long topVer, boolean active, long time) {
-            this.id = id;
-            this.size = size;
-            this.topVer = topVer;
-            this.active = active;
-            this.time = time;
-        }
-
-        public int getSize() {
-            return size;
-        }
-
-        public long getTime() {
-            return time;
-        }
-
-        public String getId() {
-            return id;
-        }
-
-        public long getTopVer() {
-            return topVer;
-        }
-
-        public boolean isActive() {
-            return active;
-        }
     }
 }
