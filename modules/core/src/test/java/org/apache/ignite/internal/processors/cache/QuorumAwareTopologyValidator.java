@@ -50,6 +50,7 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 //    /** */
 //    private static final Logger log = LoggerFactory.getLogger(DPLTopologyValidator.class);
 
+    /** */
     private static final long serialVersionUID = 0L;
 
     /** */
@@ -88,7 +89,7 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
     /** */
     @GridToStringExclude
-    private final AtomicBoolean initGuard = new AtomicBoolean();
+    private final static AtomicBoolean initGuard = new AtomicBoolean();
 
     /** State. */
     private transient State state;
@@ -100,10 +101,6 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
     /** */
     @CacheNameResource
     private transient String cacheName;
-
-    QuorumAwareTopologyValidator() {
-        init();
-    }
 
     private void init() {
         if (!initGuard.compareAndSet(false, true))
@@ -177,7 +174,7 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
     /** */
     @Override public void start() throws IgniteException {
-        // No-op
+        init();
     }
 
     /** */
@@ -223,6 +220,7 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
 
         try {
             if (ignite.cluster().localNode().equals(crd)) {
+                log.trace("Local node eq coordinator.");
                 if (zkClient.checkExists().forPath(PATH) == null) {
                     zkClient.create()
                         .creatingParentsIfNeeded()
@@ -233,6 +231,8 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
                 byte[] crdData;
 
                 if (zkClient.checkExists().forPath(pathCrd) != null) {
+                    log.trace("Data update coordinator. Crd=" + crd.id());
+
                     String[] params = new String(zkClient.getData().forPath(pathCrd), "gbk").split(";");
 
                     boolean active = Boolean.parseBoolean(params[3]);
@@ -241,8 +241,15 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
                         System.currentTimeMillis() + ";" + active).getBytes();
                 }
                 else {
-                    crdData = (topologyVersion + ";" + nodes.size() + ";" +
-                        System.currentTimeMillis() + ";true").getBytes();
+                    log.trace("Create new coordinator. Crd=" + crd.id());
+
+                    if (zkClient.getChildren().forPath(PATH).size() == 0) {
+                        crdData = (topologyVersion + ";" + nodes.size() + ";" +
+                            System.currentTimeMillis() + ";true").getBytes();
+                    } else {
+                        crdData = (topologyVersion + ";" + nodes.size() + ";" +
+                            System.currentTimeMillis() + ";false").getBytes();
+                    }
                 }
 
                 createOrUpdate(zkClient, CreateMode.PERSISTENT, pathCrd, crdData);
@@ -329,10 +336,15 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
                     long time = Long.parseLong(params[2]);
                     boolean active = Boolean.parseBoolean(params[3]);
 
-                    if (size > curSize || size < delta) {
-                        setActive(false, PATH + "/" + crdId, curTopVer, curSize);
+                    if (size > delta) {
+                            if (size > curSize) {
+                                log.trace("Param active=false coordinator. Crd=" + crd);
 
-                        return false;
+                                setActive(true, PATH + "/" + crd, topVer, size);
+
+                                return false;
+                            }
+
                     }
                 }
             }
@@ -344,6 +356,8 @@ public class QuorumAwareTopologyValidator implements TopologyValidator, Lifecycl
             }
         }
         else {
+            log.trace("Check nodes. Node=" + ignite.cluster().localNode().id());
+
             String path = PATH + "/" + crdId;
 
             String[] params = new String(zkClient.getData().forPath(path), "gbk").split(";");
